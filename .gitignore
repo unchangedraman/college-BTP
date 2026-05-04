@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+*.nav
+*.snm
+*.vrb
+*.dvi
+*.ps
+*.gz
+*.run.xml
+*.bcf
+*-blx.bib
+__latexindent_temp*

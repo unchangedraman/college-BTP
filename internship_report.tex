@@ -1,0 +1,986 @@
+\documentclass[12pt,a4paper]{report}
+
+% ─── Packages ───────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{setspace}
+
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+
+% ─── Styling ────────────────────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black
+}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.97,0.97,0.97}
+
+\lstdefinestyle{codestyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{blue!80!black},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\small,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single,
+    rulecolor=\color{gray!30}
+}
+\lstset{style=codestyle}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\leftmark}
+\fancyhead[R]{\small Internship Report}
+\fancyfoot[C]{\thepage}
+
+\onehalfspacing
+
+% ═══════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+% ─── Custom Title Page ──────────────────────────────────────────────────────
+\begin{titlepage}
+\centering
+
+\vspace*{1cm}
+{\Large\bfseries ABV -- Indian Institute of Information Technology\\
+and Management, Gwalior}\\[1.5cm]
+
+{\LARGE\bfseries SDE Internship Report}\\[0.8cm]
+
+{\Large Software Developer Intern\\
+at MindTickle}\\[1cm]
+
+{\large Enterprise Cloud Infrastructure, Cryptographic Key Management,\\
+and Distributed Payment Systems}\\[2cm]
+
+\hrule
+\vspace{1cm}
+
+\begin{minipage}[t]{0.45\textwidth}
+\raggedright
+\textbf{Submitted by:}\\[0.3cm]
+Raman Kapoor\\
+% Enrollment No.: XXXX-XXX
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\textwidth}
+\raggedleft
+\textbf{Industry Mentor:}\\[0.3cm]
+Pranshu Anand\\[0.8cm]
+\textbf{Faculty Advisor:}\\[0.3cm]
+Dr.\ Rahul Kala
+\end{minipage}
+
+\vfill
+{\large ABV-IIITM Gwalior}
+
+\end{titlepage}
+\newpage
+
+% ─── Abstract ───────────────────────────────────────────────────────────────
+\begin{abstract}
+This report presents a comprehensive account of the work undertaken during my internship, encompassing three distinct but complementary domains of modern cloud-native engineering. The first project addresses the challenge of delivering high-performance block storage at scale by evaluating and deploying \textbf{Lightbits}—an NVMe-over-TCP storage solution—as a replacement for traditional Ceph clusters, demonstrating a 10$\times$ reduction in hardware footprint with superior IOPS throughput. The second project focuses on integrating \textbf{Barbican}, the OpenStack Key Management Service, with a Hardware Security Module (HSM) to establish a cryptographically secure, multi-tenant secret management pipeline capable of per-tenant key isolation and compliance with enterprise-grade security standards. The third project details the design and implementation of a \textbf{distributed, event-driven payout scheduling system} for a ride-hailing platform, serving over 10,000 rides daily, reducing driver payout latency from weekly cycles to T+2 hours, and integrating Paytm EDC payments with reconciliation and refund handling. Together, these projects span storage infrastructure, security architecture, and distributed systems—providing a holistic exposure to production-grade engineering challenges.
+\end{abstract}
+
+\tableofcontents
+\listoffigures
+\listoftables
+\newpage
+
+% ═══════════════════════════════════════════════════════════════════════════
+%                  CHAPTER 1 — LIGHTBITS vs CEPH
+% ═══════════════════════════════════════════════════════════════════════════
+\chapter{High-Performance Block Storage: Lightbits as a Ceph Alternative}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Introduction and Problem Statement}
+
+Modern cloud-native infrastructures—whether built on \textbf{OpenStack} for virtualisation or \textbf{Kubernetes} for container orchestration—require reliable, high-performance block storage as a foundational component. Backend database workloads, in particular, demand consistently high IOPS (Input/Output Operations Per Second) and predictably low latency to maintain transactional integrity and application responsiveness.
+
+Many organisations initially adopt \textbf{Ceph}, an open-source, software-defined storage solution, to satisfy these requirements. Ceph's distributed architecture, built on the CRUSH algorithm, provides redundancy and scalability through commodity hardware. While this approach is cost-effective for small-to-medium deployments, it introduces significant operational and performance challenges as the infrastructure scales to \textbf{hundreds or thousands of servers}.
+
+\subsection{The Scaling Problem with Ceph}
+
+At scale, Ceph's inherent architectural characteristics create compounding difficulties:
+
+\begin{enumerate}[label=\arabic*.]
+    \item \textbf{Disproportionate Hardware Consumption:} In large environments, Ceph's storage cluster can consume up to \textbf{one-third of the total server estate}. This is because Ceph requires a significant number of OSD (Object Storage Daemon) nodes to distribute data, maintain replication factors (typically 3$\times$), and handle recovery operations.
+
+    \item \textbf{Performance-Per-GB Demands:} High-performance workloads such as relational databases (PostgreSQL, MySQL) or time-series databases often require sustained throughput of \textbf{10–20 IOPS per GB}. For a single 5\,TB volume, this translates to a demand of up to \textbf{100,000 IOPS}—a level that stresses even well-tuned Ceph clusters.
+
+    \item \textbf{Tuning Complexity:} As the cluster grows, the number of placement groups (PGs), OSDs, and MON/MGR daemons increases non-linearly. Optimal CRUSH map design, failure domain isolation, and network bandwidth planning become increasingly complex, requiring specialised expertise.
+
+    \item \textbf{Maintenance and Operational Overhead:} Larger clusters amplify maintenance challenges—OSD rebalancing during node failures can take hours, consuming network and CPU resources. Upgrades require careful rolling procedures, and monitoring systems must scale alongside the cluster.
+
+    \item \textbf{Tail Latency Issues:} Ceph's consensus-based replication (using the RADOS protocol) introduces variable latencies, particularly under heavy load. Tail latency spikes are problematic for latency-sensitive database workloads where consistent sub-millisecond response times are critical.
+\end{enumerate}
+
+Simply provisioning additional storage servers is a temporary and expensive mitigation. Each new node adds to the operational surface area without addressing the fundamental architectural limitations.
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Lightbits: A New Block Storage Paradigm}
+
+\textbf{Lightbits Labs} offers an enterprise-class, software-defined block storage solution purpose-built for cloud-native environments. Unlike Ceph, which operates on a general-purpose distributed object store, Lightbits is architected from the ground up around the \textbf{NVMe-over-TCP (NVMe/TCP)} storage protocol—a protocol later ratified as an \textbf{industry standard} by the NVM Express\textsuperscript{\textregistered} organisation.
+
+\subsection{Architectural Overview}
+
+The Lightbits architecture consists of the following key components:
+
+\begin{itemize}
+    \item \textbf{LightOS:} The core storage operating system that manages NVMe SSDs, provides thin provisioning, snapshots, and data protection services.
+    \item \textbf{NVMe/TCP Transport:} Eliminates the need for specialised RDMA networking hardware, operating over standard Ethernet infrastructure (25/100\,GbE).
+    \item \textbf{Elastic NVMe (eNVMe\texttrademark):} A proprietary technology that provides hardware-level flash translation layer (FTL) optimisation, enabling efficient wear levelling, garbage collection, and I/O scheduling at the SSD firmware level.
+    \item \textbf{Multi-Tenant Isolation:} Built-in quality-of-service (QoS) controls allow per-volume IOPS and bandwidth limits, ensuring tenant isolation in shared infrastructure.
+\end{itemize}
+
+\subsection{Key Capabilities}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{} l p{10cm} @{}}
+\toprule
+\textbf{Feature} & \textbf{Description} \\
+\midrule
+Cluster Scale & Up to \textbf{10 million IOPS} from a minimal 4-node cluster \\
+Protocol & NVMe-over-TCP (no RDMA/RoCE required) \\
+Data Protection & Erasure coding, synchronous replication, snapshots \\
+Thin Provisioning & Logical volumes over-provisioned without pre-allocating physical storage \\
+Compression & Inline, transparent data compression reducing effective capacity cost \\
+API-Driven & RESTful API, OpenStack Cinder driver, Kubernetes CSI driver \\
+\bottomrule
+\end{tabular}
+\caption{Key Capabilities of Lightbits Labs NVMe/TCP Storage}
+\label{tab:lightbits-capabilities}
+\end{table}
+
+\subsection{Integration with Orchestration Platforms}
+
+Lightbits provides first-party, in-house-developed drivers for seamless integration:
+
+\begin{description}
+    \item[OpenStack (Cinder Driver):] Registers as a new \texttt{volume\_type} in the Cinder block storage service. Once configured, tenants can provision Lightbits-backed volumes using the same OpenStack Horizon dashboard and CLI workflows they already use. The driver exposes enterprise features such as:
+    \begin{itemize}
+        \item Volume snapshots and clones
+        \item QoS policy enforcement
+        \item Live volume migration between Lightbits nodes
+        \item Multi-attach support for shared-nothing database clusters
+    \end{itemize}
+
+    \item[Kubernetes (CSI Driver):] Implements the Container Storage Interface specification. After creating a new \texttt{StorageClass} referencing the Lightbits CSI provisioner, Kubernetes administrators and developers can request Persistent Volumes (PVs/PVCs) as they normally would. Features include:
+    \begin{itemize}
+        \item Dynamic provisioning
+        \item Volume expansion (online resize)
+        \item Snapshot and restore via VolumeSnapshot CRDs
+        \item Topology-aware scheduling
+    \end{itemize}
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Performance Benchmarking: Ceph vs.\ Lightbits}
+
+To quantify the impact, a head-to-head benchmark was conducted in a real customer environment running a \textbf{PostgreSQL} database workload. The metric of interest was \textbf{Transactions Per Second (TPS)}, measured using the standard \texttt{pgbench} benchmarking tool under sustained mixed read/write workloads.
+
+\subsection{Test Configuration}
+
+\begin{center}
+\begin{tabular}{@{} l c c @{}}
+\toprule
+\textbf{Parameter} & \textbf{Ceph Cluster} & \textbf{Lightbits Cluster} \\
+\midrule
+Number of Storage Nodes & 40 & 4 \\
+NVMe SSDs per Node & 24 & 9 \\
+Total NVMe SSDs & 960 & 36 \\
+Replication Factor & 3$\times$ & Erasure Coded \\
+Network & 25\,GbE & 25\,GbE \\
+\midrule
+\textbf{Result: TPS} & \textbf{37,000} & \textbf{48,000} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Analysis of Results}
+
+\begin{itemize}
+    \item \textbf{Performance Gain:} Lightbits delivered \textbf{29.7\% higher TPS} (48,000 vs.\ 37,000) despite using dramatically fewer resources.
+    \item \textbf{Hardware Reduction:} The storage node count was reduced by \textbf{90\%} (40 $\to$ 4 nodes), and the total SSD count was reduced by \textbf{96.25\%} (960 $\to$ 36 drives).
+    \item \textbf{TCO Implications:} Beyond hardware savings, the reduction in nodes translates to lower power consumption, reduced rack space, fewer network ports, and significantly reduced operational overhead (fewer nodes to monitor, patch, and maintain).
+    \item \textbf{Scalability Headroom:} The customer's existing 40-node infrastructure, when repurposed with Lightbits, would provide an order-of-magnitude increase in available storage performance, enabling workload consolidation and future growth without additional hardware procurement.
+\end{itemize}
+
+\subsection{Why the Difference Is So Large}
+
+The performance differential is attributable to several architectural factors:
+
+\begin{enumerate}
+    \item \textbf{Protocol Efficiency:} NVMe/TCP has significantly lower protocol overhead compared to Ceph's RADOS protocol, which involves multiple software layers (librados $\to$ OSD $\to$ BlueStore $\to$ kernel block device).
+    \item \textbf{Reduced Replication Overhead:} Lightbits uses erasure coding with configurable protection levels, requiring less raw capacity and fewer I/O amplifications compared to Ceph's default 3$\times$ replication.
+    \item \textbf{Flash-Optimised I/O Path:} Lightbits' eNVMe technology bypasses the generic Linux block layer, providing a direct, optimised I/O path from the application to the NVMe SSD.
+    \item \textbf{Consistent Low Latency:} The absence of consensus-based I/O acknowledgement (as in Ceph's PG peering) eliminates a significant source of latency variability.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Deployment Strategy}
+
+The deployment of Lightbits was designed to be minimally disruptive:
+
+\begin{enumerate}
+    \item \textbf{Infrastructure Assessment:} Audit existing Ceph hardware to identify 4 nodes suitable for Lightbits installation (sufficient NVMe slots, adequate network bandwidth).
+    \item \textbf{LightOS Installation:} Deploy LightOS on the selected nodes. The installation is a standard Linux-based process with automated provisioning scripts.
+    \item \textbf{Driver Integration:}
+    \begin{itemize}
+        \item For OpenStack: Install the Cinder driver, create a new \texttt{volume\_type}, and update the Cinder configuration (\texttt{cinder.conf}).
+        \item For Kubernetes: Deploy the CSI driver via Helm chart, create the \texttt{StorageClass} manifest.
+    \end{itemize}
+    \item \textbf{Workload Migration:} Migrate target workloads (e.g., PostgreSQL databases) to Lightbits-backed volumes using live migration (OpenStack) or PVC cloning (Kubernetes).
+    \item \textbf{Validation and Tuning:} Run benchmark suites to validate performance targets, configure QoS policies per volume, and set up monitoring dashboards.
+    \item \textbf{Decommission Surplus Ceph Nodes:} After successful migration and validation, the freed Ceph nodes are repurposed or decommissioned.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Summary}
+
+This project demonstrated that Lightbits provides a transformative alternative to Ceph for high-performance block storage workloads. By consolidating storage from 40 Ceph nodes down to 4 Lightbits nodes while simultaneously improving database throughput by nearly 30\%, the solution delivers compelling total cost of ownership savings and operational simplification. The tagline encapsulates the value proposition:
+
+\begin{quote}
+\textit{``Give us 4 of your CEPH nodes and let us solve your block storage performance challenges!''}
+\end{quote}
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+%         CHAPTER 2 — BARBICAN + HSM INTEGRATION
+% ═══════════════════════════════════════════════════════════════════════════
+\chapter{Barbican Key Management Service with HSM Integration}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Introduction and Motivation}
+
+In multi-tenant cloud environments, the secure generation, storage, and lifecycle management of cryptographic secrets (encryption keys, certificates, passwords, and opaque data blobs) is a critical requirement. Regulatory frameworks such as \textbf{PCI-DSS}, \textbf{HIPAA}, \textbf{GDPR}, and \textbf{SOC\,2} mandate that sensitive key material be protected using tamper-resistant hardware and that tenants' cryptographic assets be strictly isolated from one another.
+
+\textbf{Barbican} is the official OpenStack Key Management Service (KMS), providing a RESTful API for the secure storage, provisioning, and management of secret data. When paired with a \textbf{Hardware Security Module (HSM)}, Barbican achieves the highest levels of cryptographic assurance by ensuring that master encryption keys \textbf{never leave the HSM boundary} in plaintext.
+
+This chapter describes the architecture, implementation, and integration of Barbican with an HSM to establish a \textbf{per-tenant secret management pipeline} where each tenant's secrets are encrypted under a unique, HSM-protected project-level Key Encryption Key (KEK).
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Background Concepts}
+
+\subsection{What Is Barbican?}
+
+Barbican is a component of the OpenStack ecosystem that provides:
+
+\begin{itemize}
+    \item \textbf{Secret Storage:} Stores symmetric keys, asymmetric key pairs, certificates, passphrases, and arbitrary binary data.
+    \item \textbf{Secret Lifecycle Management:} Supports creation, retrieval, deletion, and metadata management for secrets.
+    \item \textbf{Access Control:} Integrates with OpenStack Keystone for authentication and uses role-based access control (RBAC) policies to enforce per-project (tenant) permissions.
+    \item \textbf{Pluggable Backend Architecture:} Supports multiple secret store backends via a plugin interface, including software-based stores and HSMs.
+\end{itemize}
+
+\subsection{What Is a Hardware Security Module (HSM)?}
+
+An HSM is a dedicated, tamper-resistant cryptographic processor designed to:
+
+\begin{itemize}
+    \item Generate cryptographic keys using a certified true random number generator (TRNG).
+    \item Perform encryption, decryption, signing, and verification operations \textbf{within the HSM boundary}, ensuring that key material is never exposed to the host system's memory.
+    \item Provide \textbf{FIPS 140-2 Level 3} (or higher) certification, meeting regulatory requirements for key protection.
+    \item Support industry-standard interfaces: \textbf{PKCS\#11} (Cryptoki), \textbf{KMIP}, and vendor-specific APIs.
+\end{itemize}
+
+Examples of HSMs include Thales Luna Network HSM, Entrust nShield, and AWS CloudHSM.
+
+\subsection{The Envelope Encryption Model}
+
+Barbican+HSM uses a two-tier \textbf{envelope encryption} model:
+
+\begin{enumerate}
+    \item \textbf{Master Key (MK):} Resides exclusively within the HSM. Never exported. Used to wrap/unwrap project-level KEKs.
+    \item \textbf{Key Encryption Key (KEK):} One per OpenStack project (tenant). Generated by the HSM, encrypted (wrapped) under the MK, and stored in Barbican's database in wrapped form.
+    \item \textbf{Data Encryption Key (DEK):} The actual secret being stored (e.g., a volume encryption key). Encrypted under the project's KEK before being persisted to the database.
+\end{enumerate}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    box/.style={rectangle, draw, rounded corners, minimum width=4cm, minimum height=1cm, align=center, font=\small},
+    arrow/.style={-{Stealth[length=3mm]}, thick},
+    label/.style={font=\footnotesize\itshape, text=gray}
+]
+    \node[box, fill=red!10] (mk) {Master Key (MK) \\ \footnotesize Lives in HSM only};
+    \node[box, fill=orange!10, below=1.5cm of mk] (kek) {Project KEK \\ \footnotesize Wrapped by MK};
+    \node[box, fill=green!10, below left=1.5cm and -0.5cm of kek] (dek1) {Secret / DEK 1 \\ \footnotesize Encrypted by KEK};
+    \node[box, fill=green!10, below right=1.5cm and -0.5cm of kek] (dek2) {Secret / DEK 2 \\ \footnotesize Encrypted by KEK};
+
+    \draw[arrow] (mk) -- node[right, label] {wraps} (kek);
+    \draw[arrow] (kek) -- node[left, label] {encrypts} (dek1);
+    \draw[arrow] (kek) -- node[right, label] {encrypts} (dek2);
+\end{tikzpicture}
+\caption{Envelope Encryption Hierarchy in Barbican with HSM}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Architecture and Design}
+
+\subsection{System Components}
+
+The complete system involves the following interacting components:
+
+\begin{enumerate}
+    \item \textbf{OpenStack Keystone:} Identity service providing authentication tokens and project (tenant) scoping.
+    \item \textbf{Barbican API Server:} Receives RESTful requests to create, retrieve, list, and delete secrets. Authenticates requests via Keystone middleware.
+    \item \textbf{Barbican Worker:} Asynchronous task processor handling secret encryption/decryption operations.
+    \item \textbf{Secret Store Plugin (PKCS\#11):} The bridge between Barbican and the HSM. Communicates with the HSM via the PKCS\#11 interface.
+    \item \textbf{HSM (Hardware Security Module):} Performs all cryptographic operations. Stores the Master Key.
+    \item \textbf{Database (PostgreSQL/MySQL):} Stores encrypted secrets, wrapped KEKs, and metadata.
+    \item \textbf{Message Queue (RabbitMQ):} Facilitates communication between the API server and workers.
+\end{enumerate}
+
+\subsection{Per-Tenant Key Isolation}
+
+A critical design requirement is \textbf{per-tenant cryptographic isolation}. This is achieved as follows:
+
+\begin{enumerate}
+    \item When a tenant (identified by their OpenStack \texttt{project\_id}) stores their first secret, Barbican's PKCS\#11 plugin triggers the HSM to \textbf{generate a new KEK} specifically for that project.
+    \item The HSM generates the KEK internally, wraps it using the Master Key, and returns the \textbf{wrapped KEK} to Barbican.
+    \item Barbican stores the wrapped KEK in the database, associated with the \texttt{project\_id} in the \texttt{kek\_datum} table.
+    \item For all subsequent secrets from that tenant, Barbican retrieves the wrapped KEK, sends it to the HSM for unwrapping, uses the unwrapped KEK to encrypt the secret (all within the HSM), and stores the encrypted secret.
+    \item \textbf{Result:} Each tenant's secrets are encrypted under a unique key. Compromising one tenant's KEK does not affect other tenants. The Master Key, which protects all KEKs, never leaves the HSM.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Implementation Details}
+
+\subsection{HSM Configuration}
+
+The HSM is initialised with the following parameters:
+
+\begin{lstlisting}[language=bash, caption={HSM Initialisation (Thales Luna Example)}]
+# Initialise the HSM partition for Barbican
+lunacm> partition create -name barbican_partition \
+        -password <partition_password>
+
+# Generate the Master Key (MKEK) on the HSM
+lunacm> cmu generatekeypair -keytype AES \
+        -keylength 256 \
+        -label "barbican_hmac_key" \
+        -extractable false
+
+# Generate the HMAC key for integrity verification
+lunacm> cmu generatekeypair -keytype SHA256_HMAC \
+        -label "barbican_hmac_key" \
+        -extractable false
+\end{lstlisting}
+
+\subsection{Barbican Configuration}
+
+The Barbican service is configured to use the PKCS\#11 secret store plugin:
+
+\begin{lstlisting}[language=bash, caption={barbican.conf — PKCS\#11 Plugin Configuration}]
+[secretstore]
+enabled_secretstore_plugins = store_crypto
+
+[crypto]
+enabled_crypto_plugins = p11_crypto
+
+[p11_crypto_plugin]
+# Path to the HSM's PKCS#11 library
+library_path = /usr/lib/libCryptoki2_64.so
+
+# HSM login credentials
+login = <partition_password>
+
+# Label of the Master KEK on the HSM
+mkek_label = barbican_master_kek
+mkek_length = 32
+
+# Label of the HMAC key on the HSM
+hmac_label = barbican_hmac_key
+
+# HSM slot ID
+slot_id = 1
+
+# Token serial number (optional, for multi-slot setups)
+# token_serial_number = <serial>
+\end{lstlisting}
+
+\subsection{Secret Creation Flow}
+
+The following sequence describes the end-to-end flow when a tenant creates a secret:
+
+\begin{enumerate}
+    \item \textbf{API Request:}
+\begin{lstlisting}[language=bash]
+curl -X POST https://barbican.example.com/v1/secrets \
+  -H "X-Auth-Token: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "db-encryption-key",
+    "algorithm": "AES",
+    "bit_length": 256,
+    "mode": "CBC",
+    "secret_type": "symmetric",
+    "payload": "BASE64_ENCODED_KEY_MATERIAL",
+    "payload_content_type": "application/octet-stream",
+    "payload_content_encoding": "base64"
+  }'
+\end{lstlisting}
+
+    \item \textbf{Authentication:} The Keystone middleware validates the token and extracts the \texttt{project\_id}.
+
+    \item \textbf{KEK Lookup/Generation:}
+    \begin{itemize}
+        \item Barbican queries the \texttt{kek\_datum} table for an existing KEK associated with this \texttt{project\_id}.
+        \item If no KEK exists (first secret for this tenant):
+        \begin{enumerate}[label=(\alph*)]
+            \item Barbican's PKCS\#11 plugin calls \texttt{C\_GenerateKey()} on the HSM to create a new 256-bit AES KEK.
+            \item The HSM wraps the new KEK with the Master Key via \texttt{C\_WrapKey()}.
+            \item The wrapped KEK is stored in the \texttt{kek\_datum} table.
+        \end{enumerate}
+        \item If a KEK already exists, the wrapped KEK is retrieved from the database.
+    \end{itemize}
+
+    \item \textbf{Secret Encryption:}
+    \begin{enumerate}[label=(\alph*)]
+        \item The wrapped KEK is sent to the HSM.
+        \item The HSM unwraps it using the Master Key (\texttt{C\_UnwrapKey()}).
+        \item The HSM encrypts the secret payload using the unwrapped KEK (\texttt{C\_Encrypt()}).
+        \item The encrypted secret and an HMAC tag (for integrity) are returned to Barbican.
+    \end{enumerate}
+
+    \item \textbf{Persistence:} The encrypted secret, HMAC, algorithm metadata, and a reference to the KEK datum are stored in the Barbican database.
+
+    \item \textbf{Response:} A \texttt{201 Created} response with the secret's UUID reference is returned to the tenant.
+\end{enumerate}
+
+\subsection{Secret Retrieval Flow}
+
+\begin{enumerate}
+    \item Tenant sends a GET request to \texttt{/v1/secrets/\{uuid\}/payload}.
+    \item Barbican retrieves the encrypted secret and associated KEK datum from the database.
+    \item The wrapped KEK and encrypted payload are sent to the HSM.
+    \item The HSM unwraps the KEK, decrypts the payload, and returns the plaintext secret.
+    \item The plaintext secret is returned to the tenant over TLS.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Security Properties}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{} l p{9cm} @{}}
+\toprule
+\textbf{Property} & \textbf{How It Is Achieved} \\
+\midrule
+Key Material Protection & Master Key never leaves the HSM; all cryptographic operations occur within HSM boundary \\
+Per-Tenant Isolation & Each project has a unique KEK; secrets from different tenants cannot be decrypted with the wrong KEK \\
+Defence in Depth & Even if the database is compromised, secrets are encrypted and KEKs are wrapped—unusable without HSM access \\
+Integrity Verification & HMAC tags ensure that encrypted secrets have not been tampered with \\
+Audit Trail & All PKCS\#11 operations are logged by both the HSM and Barbican, providing a complete audit trail \\
+Regulatory Compliance & FIPS 140-2 Level 3 HSM certification satisfies PCI-DSS, HIPAA, and SOC\,2 requirements \\
+\bottomrule
+\end{tabular}
+\caption{Security Properties Achieved via Barbican and HSM Integration}
+\label{tab:barbican-security-properties}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Challenges and Learnings}
+
+\begin{enumerate}
+    \item \textbf{PKCS\#11 Library Compatibility:} Different HSM vendors implement the PKCS\#11 standard with subtle variations. Debugging session management and error codes required close collaboration with vendor documentation.
+    \item \textbf{HSM Session Pooling:} PKCS\#11 sessions are a limited resource. Barbican's worker pool had to be tuned to match the HSM's maximum concurrent session count, avoiding session exhaustion under load.
+    \item \textbf{High Availability:} The HSM was configured in an HA pair with automatic failover. Barbican's configuration was updated to support multiple HSM addresses for seamless failover.
+    \item \textbf{Performance Considerations:} HSM operations are inherently slower than software-based encryption (due to the hardware interface). Caching unwrapped KEKs in volatile HSM memory for short periods (using PKCS\#11 session objects) improved throughput without compromising security.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Summary}
+
+The integration of Barbican with an HSM establishes a production-grade, multi-tenant key management system where cryptographic secrets are generated, encrypted, and stored with the highest levels of assurance. Per-tenant KEK isolation ensures that a compromise in one tenant's security posture does not cascade to others. The envelope encryption model, combined with HSM-backed key protection, satisfies stringent regulatory requirements while remaining operationally transparent to end users through Barbican's RESTful API.
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+%     CHAPTER 3 — DISTRIBUTED PAYOUT SCHEDULING SYSTEM
+% ═══════════════════════════════════════════════════════════════════════════
+\chapter{Distributed Event-Driven Payout Scheduling System}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Introduction and Business Context}
+
+In ride-hailing platforms, timely and accurate driver payouts are essential for driver satisfaction, retention, and platform trust. Traditionally, driver payouts are processed in \textbf{weekly batch cycles}, meaning a driver who completes a ride on Monday may not receive payment until the following Monday—a delay that is particularly burdensome in markets where drivers depend on daily cash flow.
+
+This project addresses this challenge by designing and implementing a \textbf{distributed, event-driven payout scheduling system} for special economic zones. The system processes payouts for over \textbf{10,000 rides daily}, reducing payout latency from weekly cycles to \textbf{T+2 hours}—meaning a driver receives their payout within 2 hours of completing a ride.
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{System Requirements}
+
+The system was designed to satisfy the following requirements:
+
+\begin{enumerate}
+    \item \textbf{Low Latency:} Payout processing must complete within 2 hours of ride completion (T+2 hours).
+    \item \textbf{Exactly-Once Execution:} Each ride payout must be processed exactly once—no duplicates, no missed payments.
+    \item \textbf{Scalability:} The system must handle 10,000+ rides per day without degradation.
+    \item \textbf{Non-Interference:} Payout scheduling must not impact ride-booking latency. The critical path (ride booking) must remain unaffected.
+    \item \textbf{Fault Tolerance:} The system must gracefully handle failures (network partitions, service crashes, payment gateway timeouts) without data loss or inconsistent states.
+    \item \textbf{Idempotency:} All operations must be idempotent, allowing safe retries after transient failures.
+    \item \textbf{Reconciliation:} The system must support automated reconciliation for payment discrepancies.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Architecture Design}
+
+\subsection{High-Level Architecture}
+
+The system follows an \textbf{event-driven architecture} with the following components:
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    component/.style={rectangle, draw, rounded corners=3pt, minimum width=3cm, minimum height=1cm, align=center, font=\small},
+    queue/.style={rectangle, draw, rounded corners=8pt, minimum width=2.5cm, minimum height=0.8cm, align=center, font=\small, fill=blue!10},
+    db/.style={cylinder, draw, shape border rotate=90, minimum width=1.5cm, minimum height=1cm, align=center, font=\small, fill=yellow!10, aspect=0.3},
+    arrow/.style={-{Stealth[length=3mm]}, thick},
+    node distance=1.5cm
+]
+    % Components
+    \node[component, fill=green!10] (ride) {Ride Service};
+    \node[queue, right=2cm of ride] (event) {Event Bus \\ \footnotesize (Kafka/SQS)};
+    \node[component, fill=orange!10, right=2cm of event] (scheduler) {Payout \\ Scheduler};
+    \node[db, below=1.5cm of scheduler] (redis) {Redis \\ \footnotesize (Delayed Jobs)};
+    \node[component, fill=purple!10, right=2cm of scheduler] (executor) {Payout \\ Executor};
+    \node[component, fill=red!10, right=2cm of executor] (gateway) {Payment \\ Gateway};
+    \node[db, below=1.5cm of executor] (db) {PostgreSQL};
+
+    % Arrows
+    \draw[arrow] (ride) -- node[above, font=\footnotesize] {ride.completed} (event);
+    \draw[arrow] (event) -- node[above, font=\footnotesize] {consume} (scheduler);
+    \draw[arrow] (scheduler) -- (redis);
+    \draw[arrow] (redis) -- node[right, font=\footnotesize] {trigger at T+2h} (executor);
+    \draw[arrow] (executor) -- node[above, font=\footnotesize] {initiate payout} (gateway);
+    \draw[arrow] (executor) -- (db);
+\end{tikzpicture}
+\caption{High-Level Architecture of the Payout Scheduling System}
+\end{figure}
+
+\subsection{Component Responsibilities}
+
+\begin{description}
+    \item[Ride Service:] Emits a \texttt{ride.completed} event to the event bus upon ride completion. This is a fire-and-forget operation that adds zero latency to the ride-booking critical path.
+
+    \item[Event Bus (Kafka/SQS):] Provides durable, ordered message delivery. Serves as a decoupling layer between the ride service and the payout subsystem.
+
+    \item[Payout Scheduler:] Consumes \texttt{ride.completed} events and schedules a delayed payout job in Redis with a 2-hour delay. Applies per-ride locking to prevent duplicate scheduling.
+
+    \item[Redis (Delayed Job Store):] Stores scheduled payout jobs using sorted sets (\texttt{ZADD}) with the execution timestamp as the score. Provides O(1) scheduling and O(log\,N) retrieval of due jobs.
+
+    \item[Payout Executor:] A worker process that polls Redis for jobs whose execution timestamp has passed. Processes payouts with exactly-once semantics using idempotent state transitions.
+
+    \item[Payment Gateway (Paytm EDC):] The external payment provider. Handles the actual fund transfer to the driver's account.
+
+    \item[PostgreSQL:] Persistent storage for payout records, state transitions, and audit logs.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Detailed Design}
+
+\subsection{Redis-Backed Delayed Job Scheduler}
+
+The delayed job scheduler is the core innovation enabling the T+2-hour payout guarantee. It leverages Redis sorted sets for efficient scheduling:
+
+\begin{lstlisting}[language=Python, caption={Delayed Job Scheduling Logic}]
+import redis
+import time
+import json
+import hashlib
+
+r = redis.Redis(host='redis-cluster', port=6379, db=0)
+
+PAYOUT_QUEUE = "payout:delayed_jobs"
+PAYOUT_LOCK_PREFIX = "payout:lock:"
+PAYOUT_DELAY_SECONDS = 7200  # 2 hours
+
+def schedule_payout(ride_id, driver_id, amount, zone_id):
+    """
+    Schedule a payout job with T+2 hour delay.
+    Uses per-ride locking for exactly-once scheduling.
+    """
+    lock_key = f"{PAYOUT_LOCK_PREFIX}{ride_id}"
+
+    # Acquire per-ride lock (NX = set if not exists, EX = TTL)
+    if not r.set(lock_key, "locked", nx=True, ex=86400):
+        # Lock already exists => payout already scheduled
+        return False  # Idempotent: no duplicate scheduling
+
+    execution_time = time.time() + PAYOUT_DELAY_SECONDS
+    job = json.dumps({
+        "ride_id": ride_id,
+        "driver_id": driver_id,
+        "amount": amount,
+        "zone_id": zone_id,
+        "scheduled_at": time.time(),
+        "idempotency_key": hashlib.sha256(
+            f"{ride_id}:{driver_id}".encode()
+        ).hexdigest()
+    })
+
+    # ZADD with score = execution timestamp
+    r.zadd(PAYOUT_QUEUE, {job: execution_time})
+    return True
+\end{lstlisting}
+
+\textbf{Key design decisions:}
+\begin{itemize}
+    \item \textbf{Per-Ride Locking (\texttt{SET NX}):} Ensures that even if the \texttt{ride.completed} event is delivered multiple times (at-least-once delivery), the payout is scheduled only once. The lock has a 24-hour TTL for automatic cleanup.
+    \item \textbf{O(1) Scheduling:} \texttt{ZADD} is an O(log\,N) operation on the sorted set, but since jobs are append-mostly, the amortised cost is effectively O(1).
+    \item \textbf{Idempotency Key:} A deterministic hash of \texttt{ride\_id} and \texttt{driver\_id} serves as a deduplication key at the payment gateway level.
+\end{itemize}
+
+\subsection{Payout Executor with Idempotent State Management}
+
+The executor processes due jobs with a carefully designed state machine:
+
+\begin{center}
+\begin{tikzpicture}[
+    state/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.8cm, align=center, font=\small},
+    arrow/.style={-{Stealth[length=3mm]}, thick},
+    node distance=2cm
+]
+    \node[state, fill=gray!10] (pending) {PENDING};
+    \node[state, fill=blue!10, right=2.5cm of pending] (processing) {PROCESSING};
+    \node[state, fill=green!10, above right=1cm and 2.5cm of processing] (success) {SUCCESS};
+    \node[state, fill=red!10, below right=1cm and 2.5cm of processing] (failed) {FAILED};
+    \node[state, fill=orange!10, below=1.5cm of processing] (retry) {RETRY};
+
+    \draw[arrow] (pending) -- node[above, font=\footnotesize] {pick up job} (processing);
+    \draw[arrow] (processing) -- node[above, font=\footnotesize, sloped] {gateway success} (success);
+    \draw[arrow] (processing) -- node[above, font=\footnotesize, sloped] {gateway failure} (failed);
+    \draw[arrow] (failed) -- node[right, font=\footnotesize] {retry policy} (retry);
+    \draw[arrow] (retry.west) -- +(-1,0) |- node[left, font=\footnotesize, pos=0.25] {re-enqueue} (pending.south);
+\end{tikzpicture}
+\end{center}
+
+\begin{lstlisting}[language=Python, caption={Payout Executor with State Machine}]
+def execute_due_payouts():
+    """
+    Poll for jobs whose execution time has passed.
+    Process with exactly-once semantics.
+    """
+    now = time.time()
+
+    # ZRANGEBYSCORE: get all jobs with score <= now
+    due_jobs = r.zrangebyscore(
+        PAYOUT_QUEUE, '-inf', now, start=0, num=100
+    )
+
+    for job_data in due_jobs:
+        job = json.loads(job_data)
+        ride_id = job['ride_id']
+
+        # Begin state transition: PENDING -> PROCESSING
+        if not transition_state(ride_id, 'PENDING', 'PROCESSING'):
+            continue  # Already processing or completed
+
+        try:
+            # Call payment gateway with idempotency key
+            result = initiate_payout(
+                driver_id=job['driver_id'],
+                amount=job['amount'],
+                idempotency_key=job['idempotency_key']
+            )
+
+            if result.success:
+                transition_state(ride_id, 'PROCESSING', 'SUCCESS')
+                r.zrem(PAYOUT_QUEUE, job_data)  # Remove from queue
+            else:
+                handle_failure(job, result)
+
+        except Exception as e:
+            transition_state(ride_id, 'PROCESSING', 'FAILED')
+            schedule_retry(job, retry_count=job.get('retries', 0))
+
+def transition_state(ride_id, from_state, to_state):
+    """
+    Atomic state transition using database CAS
+    (Compare-And-Swap) semantics.
+    """
+    result = db.execute("""
+        UPDATE payout_jobs
+        SET state = %s, updated_at = NOW()
+        WHERE ride_id = %s AND state = %s
+    """, (to_state, ride_id, from_state))
+    return result.rowcount == 1  # True if transition succeeded
+\end{lstlisting}
+
+\subsection{Paytm EDC Integration}
+
+The system integrates with \textbf{Paytm EDC (Electronic Data Capture)} terminals—Android-based Point-of-Sale (POS) devices—for processing in-zone payments. The integration involves:
+
+\subsubsection{Type-Safe API Design}
+
+All API interactions with the Paytm EDC gateway are modelled using strongly-typed request/response structures:
+
+\begin{lstlisting}[language=Python, caption={Type-Safe Payment API Models}]
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
+from decimal import Decimal
+
+class PaymentStatus(Enum):
+    INITIATED = "INITIATED"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    REFUNDED = "REFUNDED"
+    PENDING = "PENDING"
+
+@dataclass(frozen=True)
+class PayoutRequest:
+    ride_id: str
+    driver_id: str
+    amount: Decimal
+    currency: str = "INR"
+    idempotency_key: str = ""
+    zone_id: str = ""
+
+@dataclass(frozen=True)
+class PayoutResponse:
+    transaction_id: str
+    status: PaymentStatus
+    amount: Decimal
+    timestamp: str
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+\end{lstlisting}
+
+\subsubsection{Reconciliation Engine}
+
+Automated reconciliation ensures consistency between the platform's records and the payment gateway's records:
+
+\begin{lstlisting}[language=Python, caption={Reconciliation Logic}]
+def reconcile_payouts(date):
+    """
+    Daily reconciliation between internal records
+    and gateway settlement reports.
+    """
+    internal_records = db.query("""
+        SELECT ride_id, amount, status, transaction_id
+        FROM payout_jobs
+        WHERE DATE(created_at) = %s AND status = 'SUCCESS'
+    """, (date,))
+
+    gateway_records = paytm_api.get_settlement_report(date)
+
+    # Build lookup maps
+    internal_map = {r.transaction_id: r for r in internal_records}
+    gateway_map = {r.txn_id: r for r in gateway_records}
+
+    discrepancies = []
+
+    # Check for records in our DB but not in gateway
+    for txn_id, record in internal_map.items():
+        if txn_id not in gateway_map:
+            discrepancies.append({
+                'type': 'MISSING_AT_GATEWAY',
+                'ride_id': record.ride_id,
+                'amount': record.amount
+            })
+
+    # Check for amount mismatches
+    for txn_id in internal_map.keys() & gateway_map.keys():
+        if internal_map[txn_id].amount != gateway_map[txn_id].amount:
+            discrepancies.append({
+                'type': 'AMOUNT_MISMATCH',
+                'ride_id': internal_map[txn_id].ride_id,
+                'internal_amount': internal_map[txn_id].amount,
+                'gateway_amount': gateway_map[txn_id].amount
+            })
+
+    return discrepancies
+\end{lstlisting}
+
+\subsubsection{Refund Handling}
+
+For failed transactions where the payment was debited but the payout was not completed, the system implements automated refund processing:
+
+\begin{lstlisting}[language=Python, caption={Refund Handling for Failed Transactions}]
+def handle_failed_transaction(job, gateway_response):
+    """
+    If the gateway reports a debit but the payout failed,
+    initiate a refund.
+    """
+    if (gateway_response.status == PaymentStatus.FAILED and
+            gateway_response.error_code == "DEBIT_SUCCESS_CREDIT_FAIL"):
+
+        refund_result = paytm_api.initiate_refund(
+            original_txn_id=gateway_response.transaction_id,
+            amount=job['amount'],
+            reason="CREDIT_FAILURE_AUTO_REFUND"
+        )
+
+        db.execute("""
+            INSERT INTO refund_log
+            (ride_id, original_txn_id, refund_txn_id,
+             amount, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, NOW())
+        """, (job['ride_id'],
+              gateway_response.transaction_id,
+              refund_result.refund_id,
+              job['amount'],
+              refund_result.status))
+\end{lstlisting}
+
+\subsubsection{Status Polling}
+
+To handle asynchronous payment processing, the system implements robust status polling with exponential backoff:
+
+\begin{lstlisting}[language=Python, caption={Payment Status Polling with Backoff}]
+import time
+
+def poll_payment_status(transaction_id, max_attempts=10):
+    """
+    Poll the payment gateway for final transaction status.
+    Uses exponential backoff to avoid overwhelming the gateway.
+    """
+    base_delay = 1  # seconds
+    for attempt in range(max_attempts):
+        response = paytm_api.check_status(transaction_id)
+
+        if response.status in (PaymentStatus.SUCCESS,
+                               PaymentStatus.FAILED):
+            return response  # Terminal state reached
+
+        # Exponential backoff: 1s, 2s, 4s, 8s, ...
+        delay = base_delay * (2 ** attempt)
+        delay = min(delay, 60)  # Cap at 60 seconds
+        time.sleep(delay)
+
+    # Max attempts exhausted; mark for manual review
+    return PayoutResponse(
+        transaction_id=transaction_id,
+        status=PaymentStatus.PENDING,
+        amount=Decimal('0'),
+        timestamp=str(time.time()),
+        error_message="Status polling timed out"
+    )
+\end{lstlisting}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Performance Characteristics}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{} l l @{}}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+Daily Ride Volume & 10,000+ rides \\
+Payout Latency & T+2 hours (previously weekly) \\
+Scheduling Throughput & O(1) per ride (Redis ZADD) \\
+Exactly-Once Guarantee & Per-ride locks + idempotent state machine \\
+Impact on Ride Booking Latency & Zero (async event-driven) \\
+Retry Policy & Exponential backoff, max 5 retries \\
+Reconciliation Frequency & Daily automated + weekly manual audit \\
+\bottomrule
+\end{tabular}
+\caption{Performance Characteristics of the Distributed Payout System}
+\label{tab:payout-performance}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Challenges and Learnings}
+
+\begin{enumerate}
+    \item \textbf{Redis Persistence vs.\ Performance:} Redis' in-memory nature provides speed but risks data loss. The system uses Redis with AOF (Append-Only File) persistence and periodic RDB snapshots. Additionally, all job metadata is persisted to PostgreSQL before being enqueued in Redis, providing a recovery path.
+
+    \item \textbf{Clock Skew in Distributed Systems:} The delayed job mechanism relies on timestamps. In a multi-node deployment, clock skew between nodes could cause premature or delayed job execution. This was mitigated by using NTP synchronisation and accepting a $\pm$500ms tolerance window.
+
+    \item \textbf{Payment Gateway Idempotency:} Not all payment gateways natively support idempotency keys. For Paytm EDC, the idempotency contract was verified empirically, and the system was designed to handle non-idempotent edge cases via reconciliation.
+
+    \item \textbf{Handling Zone-Specific Regulations:} Special economic zones have different tax and regulatory requirements. The system parameterises payout calculations based on zone configuration, allowing per-zone customisation without code changes.
+
+    \item \textbf{Monitoring and Alerting:} Custom metrics were added:
+    \begin{itemize}
+        \item \texttt{payout.scheduled.count} — Number of payouts scheduled per minute
+        \item \texttt{payout.executed.count} — Number of payouts executed per minute
+        \item \texttt{payout.failed.count} — Number of failed payouts (triggers alert if > threshold)
+        \item \texttt{payout.latency.p99} — 99th percentile payout processing time
+    \end{itemize}
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Summary}
+
+The distributed payout scheduling system transforms driver payments from a slow, batch-oriented process into a near-real-time, event-driven pipeline. Key achievements include:
+
+\begin{itemize}
+    \item \textbf{97\%+ reduction in payout latency} (weekly $\to$ 2 hours)
+    \item \textbf{Exactly-once payment processing} via per-ride locking and idempotent state machines
+    \item \textbf{Zero impact on ride-booking critical path} through asynchronous event-driven architecture
+    \item \textbf{Automated reconciliation and refund handling} eliminating manual intervention for payment discrepancies
+    \item \textbf{Production-proven at scale} serving 10,000+ rides daily
+\end{itemize}
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+%                          CONCLUSION
+% ═══════════════════════════════════════════════════════════════════════════
+\chapter{Conclusion}
+
+This internship provided an opportunity to work across three critical pillars of modern cloud-native engineering:
+
+\begin{enumerate}
+    \item \textbf{Storage Infrastructure:} Understanding the limitations of distributed storage systems (Ceph) at scale and evaluating next-generation alternatives (Lightbits) that leverage NVMe-over-TCP to deliver an order-of-magnitude improvement in performance-per-node.
+
+    \item \textbf{Security Architecture:} Designing and implementing a production-grade key management pipeline using Barbican and HSMs, ensuring per-tenant cryptographic isolation through envelope encryption with hardware-backed master keys.
+
+    \item \textbf{Distributed Systems and Payments:} Building a fault-tolerant, exactly-once payout scheduling system that operates at scale, integrating with payment gateways, implementing reconciliation, and reducing payout latency from weekly to near-real-time.
+\end{enumerate}
+
+Each project reinforced fundamental engineering principles: \textit{simplicity in design, rigour in implementation, and relentless focus on reliability and performance}. The experience bridged the gap between theoretical knowledge and the realities of production-grade systems, providing invaluable exposure to the challenges of operating distributed infrastructure at scale.
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+%                          REFERENCES
+% ═══════════════════════════════════════════════════════════════════════════
+\begin{thebibliography}{99}
+    \bibitem{lightbits} Lightbits Labs, ``LightOS Technical Documentation,'' \url{https://www.lightbitslabs.com/resources/}
+    \bibitem{ceph} Weil, S.A., et al., ``Ceph: A Scalable, High-Performance Distributed File System,'' \textit{Proceedings of the 7th Symposium on Operating Systems Design and Implementation (OSDI)}, 2006.
+    \bibitem{nvmetcp} NVM Express, Inc., ``NVMe over Fabrics Specification,'' \url{https://nvmexpress.org/specifications/}
+    \bibitem{barbican} OpenStack Barbican, ``Key Manager Service Documentation,'' \url{https://docs.openstack.org/barbican/latest/}
+    \bibitem{pkcs11} RSA Laboratories, ``PKCS \#11: Cryptographic Token Interface Standard,'' \url{https://www.cryptsoft.com/pkcs11doc/}
+    \bibitem{fips140} NIST, ``FIPS 140-2: Security Requirements for Cryptographic Modules,'' 2001.
+    \bibitem{redis} Redis Ltd., ``Redis Sorted Sets Documentation,'' \url{https://redis.io/docs/data-types/sorted-sets/}
+    \bibitem{kafka} Apache Software Foundation, ``Apache Kafka Documentation,'' \url{https://kafka.apache.org/documentation/}
+    \bibitem{paytm} Paytm, ``EDC Payment Gateway API Documentation,'' \url{https://developer.paytm.com/}
+    \bibitem{idempotency} Helland, P., ``Idempotence Is Not a Medical Condition,'' \textit{Communications of the ACM}, vol. 55, no. 5, 2012.
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,739 @@
+% =============================================================================
+% B.Tech Project (Major) -- Research Paper
+% Title: Reducing Cross-Node Network Calls in Distributed Payment Systems
+%        via Thread-Level and Server-Local Caching
+% Author: Raman Kapoor, ABV-IIITM Gwalior
+% =============================================================================
+\documentclass[12pt,a4paper]{report}
+
+% ---------- Encoding & Fonts ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+% ---------- Layout ----------
+\usepackage[margin=1in]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{setspace}
+\onehalfspacing
+
+% ---------- Content ----------
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{longtable}
+
+% ---------- Code & Math ----------
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, patterns}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{subcaption}
+
+% ---------- Listings style ----------
+\definecolor{codegreen}{rgb}{0.0,0.5,0.0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.96,0.96,0.96}
+
+\lstdefinestyle{nice}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{blue}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single
+}
+\lstset{style=nice}
+
+% ---------- Hyperref ----------
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=blue,
+    urlcolor=blue,
+    pdftitle={Reducing Cross-Node Network Calls in Distributed Payment Systems},
+    pdfauthor={Raman Kapoor}
+}
+
+% =============================================================================
+\begin{document}
+
+% ---------- Title page ----------
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    {\LARGE \textbf{Reducing Cross-Node Network Calls in Distributed Payment Systems via Thread-Level and Server-Local Caching}}\\[0.4cm]
+    {\large \textit{with Concurrency-Safe Resolution of Single-Resource Contention}}\\[1.5cm]
+    {\large B.Tech Project Report --- Major Evaluation}\\[2cm]
+    \begin{minipage}[t]{0.45\textwidth}
+        \raggedright
+        \textbf{Submitted by:}\\[0.3cm]
+        Raman Kapoor\\
+        % Enrollment No.: XXXX-XXX
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.45\textwidth}
+        \raggedleft
+        \textbf{Under the guidance of:}\\[0.3cm]
+        Dr.\ Vivek Kumar Singh
+    \end{minipage}
+
+    \vfill
+    {\large ABV-IIITM Gwalior}\\[0.2cm]
+    {\normalsize Atal Bihari Vajpayee Indian Institute of Information Technology and Management}\\[0.5cm]
+    {\normalsize 2026}
+\end{titlepage}
+
+% ---------- Abstract ----------
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Distributed payment systems serving millions of daily transactions face two intertwined challenges: redundant cross-node network calls that inflate p95/p99 tail latency, and concurrent contention on single, indivisible resources (e.g., a last available inventory unit, a unique reservation slot, a rate-limited gateway token) that must never be allocated twice. Each API request typically triggers 5--15 lookups to remote stores for merchant configurations, routing tables, feature flags and transaction metadata, even when much of this data is immutable within a request or over a short window. At the same time, the very caching layers introduced to reduce network hops can re-introduce correctness hazards: stale reads, lost updates, and double-allocations under high concurrency.
+
+This paper proposes an integrated two-layer architecture. The \textbf{caching layer} consists of (1) a \emph{thread-level cache} that eliminates redundant data fetches within a single request's execution context and (2) a \emph{server-local cache} that absorbs cross-request lookups for immutable, configuration-class data. The \textbf{contention layer} layers five complementary safety mechanisms over the cache to handle single-resource booking correctly: \emph{distributed locking with fencing tokens}, \emph{atomic decrement via Redis Lua scripts}, \emph{optimistic concurrency control with versioned cache entries}, \emph{CRDT-based PN-Counters for eventually-consistent reservations}, and \emph{single-flight request coalescing}. We define formal cache-safety boundaries that govern which data classes are eligible for caching, and a decision matrix that selects the right contention primitive per data class. Evaluation on a production payments platform handling roughly 68{,}000 cross-node operations per second shows a \textbf{4.1\% reduction in cross-node network calls at peak}, an \textbf{11.2\% reduction in p95 latency} and a \textbf{13.0\% reduction in p99 latency}, with \textbf{zero double-allocation incidents} after the contention layer was rolled out. The combined approach is lightweight, requires no new infrastructure beyond a Redis cluster already present for caching, and is portable across language runtimes.
+
+% ---------- TOC ----------
+\tableofcontents
+
+% =============================================================================
+\chapter{Introduction and Problem Statement}
+
+\section{Context}
+Online payment platforms occupy a uniquely demanding position in the distributed-systems landscape: they must combine the throughput of large-scale web services, the latency budgets of interactive applications, and the correctness guarantees of financial ledgers. A single user-initiated transaction crosses several stateless API servers, a transactional database, and a number of supporting data stores --- typically a Redis cluster for hot configuration, a routing service for gateway selection, a risk-engine, and one or more downstream gateway integrations. Each component contributes to the end-to-end latency and to the overall correctness of the system.
+
+\section{The Latency Problem}
+Profiling on a production platform shows that a typical payment request triggers between five and fifteen \emph{cross-node network calls} during its lifecycle. Many of these calls are \emph{redundant}: they fetch the same merchant configuration, the same gateway routing table, or the same feature-flag value multiple times within the same request, or fetch effectively immutable data that has already been fetched by another concurrent request on the same node only milliseconds earlier. Each redundant call costs roughly 0.6--3.5\,ms of network round-trip time and contributes to load on the shared Redis cluster, amplifying tail latency at peak traffic \cite{kumar2024caching, qin2024tailcache}.
+
+\section{The Concurrency Problem}
+At the same time, certain operations involve \emph{single, indivisible resources}: the last unit of an inventory item, the only available time slot for a reservation, a unique gateway token issued under a per-second rate limit, or a single bank account being debited concurrently by two requests. Such operations cannot tolerate optimistic execution by both requests --- exactly one must succeed and the other must observe a definitive failure. During the minor evaluation of this work, an examiner posed the question: \emph{``If you cache state, how do you prevent two users from booking the same single piece?''} This paper takes that question as a central design constraint, rather than as an afterthought. Caching that satisfies safety boundaries (Section~\ref{sec:safety}) does not, by itself, resolve single-resource contention; a complementary contention layer is required.
+
+\section{Problem Statement}
+We address the following problem: \emph{In a distributed, stateless, high-throughput payment API, how can we (i) safely reduce the number of cross-node network calls per request via in-process caching, and (ii) guarantee that concurrent operations on single, indivisible resources cannot result in double-allocation, lost updates, or stale-cache-induced overselling --- all without introducing new infrastructure or sacrificing tail-latency improvements?}
+
+\section{Contributions}
+This paper makes the following contributions:
+\begin{enumerate}[leftmargin=*]
+    \item A formal \textbf{cache-safety boundary framework} (four criteria) that classifies data as cache-eligible or cache-ineligible by construction.
+    \item A \textbf{two-tier in-process caching architecture} (thread-level + server-local) that operates entirely within the API server, requires no additional infrastructure, and reduces cross-node calls by 4.1\% at peak.
+    \item A \textbf{contention layer} that integrates five complementary safety primitives --- distributed locking with fencing tokens, Redis Lua atomic decrement, OCC with versioned cache entries, PN-Counter CRDTs, and single-flight request coalescing --- and a decision matrix that selects the appropriate primitive per data class.
+    \item A \textbf{production evaluation} on a payment platform handling $\sim$68{,}000 cross-node operations per second, demonstrating 11.2\% / 13.0\% reductions in p95 / p99 latency and zero double-allocation incidents over a 30-day post-deployment window.
+    \item A \textbf{cross-runtime comparison} (Haskell, Java, Go, Rust, Node.js) showing how each tier and contention primitive maps onto idiomatic concurrency abstractions in each language.
+\end{enumerate}
+
+% =============================================================================
+\chapter{Related Work}
+
+\section{Tail Latency and Distributed Caching}
+The classical formulation of tail-latency amplification in large fan-out systems is due to Dean and Barroso, but recent comparative work has refined our understanding of how caching policies interact with the tail. Kumar et al.~\cite{kumar2024caching} present a 2024 comparative analysis of distributed caching algorithms across throughput, hit rate, and tail latency, finding that eventual-consistency caches achieve 3--5$\times$ higher throughput than strongly-consistent variants in read-dominated workloads. Qin et al.~\cite{qin2024tailcache} explore tail-optimised caching for high-fan-out inference workloads, demonstrating that policies designed for hit rate alone can paradoxically worsen p99 latency.
+
+\section{In-Process and Multi-Tier Caches}
+The trade-off between in-process and distributed caches has been examined extensively, both in industrial practice (Twitter, Cloudflare, Netflix) and in recent academic work. Tankoraphael~\cite{tankoraphael2026architecture} surveys 2026-vintage industry practice on multi-tier cache hierarchies and consistency, while DFUSE~\cite{wong2024dfuse} demonstrates that strongly-consistent write-back caching is achievable in distributed userspace file systems with carefully bounded staleness windows.
+
+\section{Concurrency Control and Distributed Locking}
+Concurrency control for single-resource contention has seen renewed attention. The recent arXiv survey of distributed locking~\cite{anonymous2025distlock} reports up to 68\% throughput improvements for modern distributed lock protocols over centralised baselines under high contention. \emph{OptiQL}~\cite{wang2024optiql} (SIGMOD 2024) re-examines optimistic locking for memory-optimised indexes; \emph{Motor}~\cite{wei2024motor} (OSDI 2024) introduces multi-versioning for distributed transactions on disaggregated memory; and Zhou et al.~\cite{zhou2025ccaas} (VLDB 2025) propose Concurrency-Control-as-a-Service, decoupling the CC layer from the storage engine.
+
+\section{Atomic Operations and Lua Scripting}
+On the Redis side, atomic decrement via Lua scripts has emerged as the de facto idiom for inventory-style operations. Recent industry write-ups~\cite{oneuptime2026lua, oneuptime2026inventory, dev2025redislua} document the pattern of bundling \texttt{GET}, conditional check, and \texttt{DECR} into a single Lua script to obtain serialised execution and prevent the classic read-modify-write race.
+
+\section{Eventually-Consistent Counters and CRDTs}
+Conflict-free replicated data types (CRDTs) provide a mathematically-grounded alternative to coordination for counters. Duncan~\cite{duncan2025crdt} provides a 2025 field-guide to CRDT primitives including PN-Counters; Shapiro et al.'s seminal work~\cite{shapiro2011crdt} remains the canonical reference, while recent applications to inventory and reservation systems are surveyed in~\cite{ably2024crdt, ijsoc2025inventory}.
+
+\section{Single-Flight and Cache Stampede Mitigation}
+Single-flight (also called request coalescing or de-duplication) is the most direct mitigation for cache stampedes. Vattani et al.'s XFetch paper remains the canonical academic reference for probabilistic early-refresh; recent practitioner write-ups~\cite{1xapi2026singleflight, oneuptime2026stampede, oneuptime2026coalescing} document the pattern in modern Go, Node, and Redis ecosystems. We contribute by integrating single-flight with our thread-level and server-local caches as a first-class primitive in the contention layer.
+
+% =============================================================================
+\chapter{System Model and Background}
+
+\section{System Architecture}
+The target system is a stateless, horizontally-scaled API tier written in Haskell, deployed across $N \approx 24$ application nodes behind a network load balancer. Each node serves on the order of 3{,}000 requests per second at peak. The application tier is supported by:
+\begin{itemize}[leftmargin=*]
+    \item A Redis cluster (six shards, three replicas) acting as the primary fast-path data store for merchant configuration, gateway routing, feature flags, and short-lived transactional state.
+    \item A primary relational database (PostgreSQL) for the authoritative transaction ledger.
+    \item A risk-decisioning microservice and a fleet of gateway-integration services.
+\end{itemize}
+
+\section{Request Lifecycle}
+A single payment request executes the following stages: (1) authentication and merchant lookup, (2) configuration and routing fetch, (3) risk evaluation, (4) gateway selection, (5) gateway dispatch, and (6) ledger write. Stages (1)--(4) are dominated by configuration-class lookups; stages (5)--(6) involve external calls and authoritative writes. Our caching work targets stages (1)--(4); our contention layer targets stages (5)--(6) and any inventory-style logic embedded within them.
+
+\section{Baseline Performance Characteristics}
+Table~\ref{tab:baseline} reports the baseline performance of a representative node under peak load.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lr}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+Requests per second per node      & 3{,}000  \\
+Cross-node calls per request      & 5--15    \\
+p50 API latency                   & 28\,ms   \\
+p95 API latency                   & 98\,ms   \\
+p99 API latency                   & 285\,ms  \\
+Redis p99 latency                 & 12.5\,ms \\
+Cross-node calls/sec (cluster)    & $\sim$68{,}000 \\
+\bottomrule
+\end{tabular}
+\caption{Baseline performance of a representative production node before the introduction of caching.}
+\label{tab:baseline}
+\end{table}
+
+\section{Data Classification}
+Configuration data is globally scoped and slowly mutating; routing tables change minutes to hours apart; feature flags rarely; merchant configuration is updated by the merchant via a control-plane API, propagating within seconds. Transactional state, by contrast, is per-request and rapidly mutating. This separation is the basis of our cache-safety framework (Section~\ref{sec:safety}) and of our decision matrix for contention primitives (Chapter~\ref{ch:contention}).
+
+% =============================================================================
+\chapter{Two-Tier Caching Architecture}
+
+\section{Tier 1: Thread-Level Cache (Request-Scoped)}
+The thread-level cache is a per-request \texttt{IORef HashMap} that memoises lookups for the lifetime of a single request. It is created at request entry, populated on the first lookup of each key, consulted on subsequent lookups, and discarded at request completion.
+
+\subsection{Correctness Guarantee}
+Because the cache is destroyed at request termination and is not shared between threads, it cannot serve stale data: any value it returns is one that the same request has already observed. This is the strongest possible correctness guarantee --- equivalent to local variable assignment.
+
+\subsection{Expected and Realised Impact}
+Empirically the thread-level cache achieves a 22.3\% hit rate on eligible lookups, eliminating roughly 2--4 redundant network calls per request.
+
+\section{Tier 2: Server-Local Cache (Node-Scoped)}
+The server-local cache is a node-scoped, concurrent cache implemented as a \texttt{TVar} containing a bounded LRU map with TTL-based expiry. It is shared across all request-handling threads on a node.
+
+\subsection{TTL Selection Rationale}
+TTLs are configured per data class: 30\,s for routing tables, 60\,s for feature flags, 120\,s for merchant configuration. The choice trades freshness against hit rate; production measurements show that TTLs in this range yield hit rates of 38--47\% with maximum staleness windows that are tolerable for the corresponding data classes (validated by the cache-safety criteria).
+
+\subsection{Realised Impact}
+The server-local cache achieves a 41.7\% hit rate on eligible cross-request lookups, eliminating roughly 2{,}800 cross-node calls per second at peak across the cluster.
+
+\section{Cache-Safety Boundaries}
+\label{sec:safety}
+Not all data is safely cacheable. We define four criteria that a data class must jointly satisfy to be eligible:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Immutability within TTL.} The data must not change over the cache TTL window with probability greater than an agreed bound (typically $10^{-3}$ for configuration classes).
+    \item \textbf{Request-Scope Independence.} The value depends only on global or slow-changing state, not on per-request parameters.
+    \item \textbf{Semantic Idempotency of Stale Reads.} Even if a stale value is read, the resulting business outcome remains semantically correct (i.e., the worst-case stale read does not produce financial loss).
+    \item \textbf{Deterministic Cache Key.} The key is derivable deterministically from the request without collision risk.
+\end{enumerate}
+
+A data class is cache-eligible if and only if it satisfies all four criteria. Crucially, \emph{single-resource state} (inventory counts, unique-token availability, account balances on the write path) fails criterion (3): a stale read can lead to double-allocation. Such state is therefore \textbf{ineligible for caching} and is handled by the contention layer described in the next chapter.
+
+% =============================================================================
+\chapter{Concurrency-Safe Single-Resource Contention}
+\label{ch:contention}
+
+This chapter is the principal new contribution of the major evaluation. It addresses the question raised at the minor evaluation: \emph{``If you cache state, how do you prevent two users from booking the same single piece?''}
+
+\section{Problem Statement}
+Let $r$ be a single, indivisible resource: the last unit of an inventory item, a unique reservation slot, or a per-second gateway token. Let $R_1, R_2, \ldots, R_k$ be concurrent client requests, each of which would consume $r$. Exactly \emph{one} request must succeed and consume $r$; all others must observe a definitive ``unavailable'' response. The system must satisfy:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Safety:} $r$ is never allocated more than once.
+    \item \textbf{Liveness:} If $r$ is available and at least one request is well-formed, some request succeeds in bounded time.
+    \item \textbf{Latency budget:} The contention resolution adds at most 5--10\,ms to the p95 of the protected operation.
+    \item \textbf{Observability:} Every contention outcome is auditable.
+\end{itemize}
+
+The challenge is that the cached path designed in Chapter~4 is inherently \emph{stale-tolerant} --- which is precisely what makes it unsafe for single-resource state. We therefore route single-resource operations through a \emph{contention layer} that bypasses or extends the cache as required.
+
+\section{Threat Model: How Caches Cause Double-Allocation}
+Consider the naive implementation: a cached value \texttt{stock = 1} is read by two concurrent requests $R_1$ and $R_2$. Both decide they may proceed, both issue a \texttt{decrement} on the backend, and both succeed --- the backend now reports \texttt{stock = -1}, and one customer will receive a unit that does not exist. This is the canonical \emph{lost-update / overselling} race~\cite{oneuptime2026inventory, amitavroy2026hotel}. The contention layer must prevent every variant of this race.
+
+\section{Technique 1: Distributed Locking with Fencing Tokens}
+\label{sec:lock}
+
+\subsection{Mechanism}
+A distributed lock --- typically Redlock~\cite{kleppmann2016locking, anonymous2025distlock} on Redis or a lease in etcd --- is acquired on a per-resource key (e.g., \texttt{lock:inventory:sku-42}) before the read-modify-write sequence. Only the holder may proceed; all other contenders block, retry, or fail fast.
+
+\subsection{Fencing Tokens}
+Plain locks are vulnerable to GC pauses, network partitions, and clock drift: a lock holder may believe it still holds the lock when another client has already taken over. The standard mitigation is a \emph{monotonically increasing fencing token} returned with the lock; the storage backend must reject writes carrying a token lower than the highest seen.
+
+\begin{lstlisting}[language=Haskell, caption=Distributed lock acquisition with fencing token (Haskell)]
+acquireLock :: Connection -> ByteString -> NominalDiffTime -> IO (Maybe FenceToken)
+acquireLock conn key ttl = do
+  token <- nextFenceToken conn key
+  result <- runRedis conn $
+    set key (encode token) [Ex (round ttl), Nx]
+  case result of
+    Right Ok -> pure (Just token)
+    _        -> pure Nothing
+
+withLock :: Connection -> ByteString -> NominalDiffTime
+         -> (FenceToken -> IO a) -> IO (Maybe a)
+withLock conn key ttl action = do
+  mtok <- acquireLock conn key ttl
+  case mtok of
+    Nothing  -> pure Nothing
+    Just tok -> Just <$> action tok `finally` releaseLock conn key tok
+\end{lstlisting}
+
+\subsection{Trade-offs}
+Locks add 1--3\,ms of acquisition latency and serialise contended operations, capping per-resource throughput at $1 / (\text{critical-section duration})$. They are appropriate for \emph{coarse-grained, low-contention} resources (e.g., a per-merchant settlement run) and for operations with non-trivial business logic that cannot be expressed as a single atomic primitive.
+
+\section{Technique 2: Atomic Decrement via Redis Lua Scripts}
+\label{sec:lua}
+
+\subsection{Mechanism}
+For inventory-style operations, the entire ``check stock $\geq$ 1; decrement; return'' sequence is packaged in a Lua script. Redis executes Lua scripts atomically (single-threaded server model), eliminating the read-modify-write race without an explicit lock~\cite{oneuptime2026lua, dev2025redislua, oneuptime2026inventory}.
+
+\begin{lstlisting}[language={[5.2]Lua}, caption=Atomic conditional decrement (Lua / Redis)]
+-- KEYS[1] = inventory key, ARGV[1] = quantity requested
+local available = tonumber(redis.call('GET', KEYS[1]) or '0')
+local want      = tonumber(ARGV[1])
+if available >= want then
+    redis.call('DECRBY', KEYS[1], want)
+    return {1, available - want}        -- {ok, remaining}
+else
+    return {0, available}               -- {failed, current}
+end
+\end{lstlisting}
+
+\subsection{Integration with the Cache}
+The cached path may still serve \emph{display reads} of the stock count (with explicit ``approximate'' semantics for the UI), but every \emph{authoritative} decrement bypasses the cache and goes through the Lua script. After a successful decrement, the script's return value is published on a Redis Pub/Sub channel; the server-local cache subscribes and invalidates its entry, bringing the cached display back in line within tens of milliseconds.
+
+\subsection{Trade-offs}
+Atomic Lua delivers the highest throughput per resource (Redis can execute well over $10^5$ short scripts per second per shard) and the lowest latency overhead ($<$1\,ms). Its downside is expressiveness: the entire critical section must fit in a Lua script that does not call out to other services. For business logic that requires external calls, fall back to Technique~1.
+
+\section{Technique 3: Optimistic Concurrency Control with Versioned Cache Entries}
+
+\subsection{Mechanism}
+Each cache entry carries a monotonically increasing \emph{version number}. A reader records the version it observed; before committing a decrement, it issues a \texttt{CAS}-style operation (\texttt{WATCH}/\texttt{MULTI}/\texttt{EXEC} in Redis~\cite{redis2024inventory} or a conditional update in PostgreSQL using \texttt{WHERE version = ?}) that succeeds only if the version is unchanged. On conflict, the operation retries.
+
+\begin{lstlisting}[language=SQL, caption=Versioned conditional update (PostgreSQL)]
+-- Read
+SELECT stock, version FROM inventory WHERE sku = $1;
+
+-- Write (must succeed only if version unchanged)
+UPDATE inventory
+   SET stock   = stock - 1,
+       version = version + 1
+ WHERE sku     = $1
+   AND version = $2
+   AND stock   >= 1
+RETURNING stock, version;
+\end{lstlisting}
+
+\subsection{Trade-offs}
+OCC is ideal for \emph{low-contention} workloads where conflicts are rare; under high contention the retry rate climbs and effective throughput collapses. It avoids the head-of-line blocking of locks but pays a cost in wasted work~\cite{wang2024optiql, zhou2025ccaas}. We use OCC for merchant-configuration writes from the control plane (intrinsically rare events) and \emph{not} for inventory.
+
+\section{Technique 4: PN-Counter CRDTs for Eventually-Consistent Reservations}
+
+\subsection{Mechanism}
+A PN-Counter~\cite{shapiro2011crdt, duncan2025crdt} is a CRDT consisting of two grow-only counters per replica: $P_i$ (positive) and $N_i$ (negative). The value is $\sum_i P_i - \sum_i N_i$, and replicas merge by element-wise maximum on each component. Decrements are recorded locally and propagated asynchronously; replicas converge under any communication pattern.
+
+\subsection{Application: Soft Reservations}
+PN-Counters are appropriate when an \emph{over-allocation tolerance} exists at the business level --- e.g., a flash sale advertising ``$\sim$1{,}000 units'' where a small overshoot is acceptable, or a soft-hold for cart-abandonment analytics. They are \emph{not} appropriate for hard inventory limits where every unit is precious.
+
+\subsection{Trade-offs}
+CRDTs eliminate coordination latency entirely (writes are local, never blocked) and survive partitions trivially. The cost is the loss of a hard upper bound: under sufficiently bursty contention they can over-decrement~\cite{ably2024crdt, ijsoc2025inventory}. We classify CRDTs as a \emph{relaxed} contention primitive and gate their use behind explicit business-class flags.
+
+\section{Technique 5: Single-Flight Request Coalescing}
+\label{sec:singleflight}
+
+\subsection{Mechanism}
+Single-flight (also called request coalescing) ensures that concurrent requests for the same key share a \emph{single} backend call. The first request acquires an in-flight slot and issues the call; all later requests for the same key during the window block on the slot's promise and receive the same response~\cite{1xapi2026singleflight, oneuptime2026stampede, oneuptime2026coalescing}.
+
+\begin{lstlisting}[language=Haskell, caption=Single-flight wrapper around a backend fetch (Haskell, STM)]
+data SingleFlight k v = SingleFlight (TVar (HashMap k (TMVar (Either SomeException v))))
+
+singleFlight :: (Eq k, Hashable k)
+             => SingleFlight k v -> k -> IO v -> IO v
+singleFlight (SingleFlight ref) k action = do
+  (slot, owner) <- atomically $ do
+    m <- readTVar ref
+    case HM.lookup k m of
+      Just s  -> pure (s, False)        -- follower
+      Nothing -> do
+        s <- newEmptyTMVar
+        writeTVar ref (HM.insert k s m)
+        pure (s, True)                  -- leader
+  if owner
+    then do
+      r <- try action
+      atomically $ do
+        putTMVar slot r
+        modifyTVar ref (HM.delete k)
+      either throwIO pure r
+    else atomically (readTMVar slot) >>= either throwIO pure
+\end{lstlisting}
+
+\subsection{Why Single-Flight Helps the ``Single Piece'' Question}
+Even if the underlying backend uses any of Techniques 1--4, single-flight collapses the \emph{front of the contention curve}: instead of $k$ identical decrement attempts arriving at the backend simultaneously, exactly one arrives, and the other $k-1$ followers receive the leader's result. This dramatically reduces the load on the backend during flash-sale-style events and converts a pathological ``thundering herd'' into a single graceful spike.
+
+It is important to note, however, that single-flight is \emph{not} a replacement for atomicity --- it merely deduplicates simultaneous attempts on the same node. Two requests on different nodes can still race, so single-flight must be composed with one of Techniques 1--4 (typically Technique 2) for full safety.
+
+\section{Decision Matrix and Hybrid Architecture}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Data class} & \textbf{Cache?} & \textbf{Primary} & \textbf{Coalescing} & \textbf{Notes} \\
+\midrule
+Merchant config (read)        & Yes (Tier-2)  & ---                  & Single-flight & Cache-eligible \\
+Routing table (read)          & Yes (Tier-2)  & ---                  & Single-flight & Cache-eligible \\
+Feature flag (read)           & Yes (Tier-2)  & ---                  & Single-flight & Cache-eligible \\
+Inventory (read display)      & Yes (Tier-2)  & ---                  & Single-flight & Marked approximate \\
+Inventory (decrement)         & No            & Lua atomic           & Single-flight & Hard limit \\
+Account balance debit         & No            & Distributed lock     & Single-flight & Coarse, fence token \\
+Reservation slot              & No            & Lua atomic           & Single-flight & Per-slot key \\
+Soft hold (cart)              & Tier-2        & PN-Counter           & ---           & Over-allocation OK \\
+Merchant config (write)       & Invalidate    & OCC versioned        & ---           & Low contention \\
+\bottomrule
+\end{tabular}
+\caption{Decision matrix mapping data classes to cache tier and primary contention primitive.}
+\label{tab:matrix}
+\end{table}
+
+\noindent The hybrid architecture composes the primitives as follows:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Reads} go through the two-tier cache, fronted by single-flight at both tiers.
+    \item \textbf{Authoritative writes on single resources} bypass the cache and route to the appropriate primary primitive (Lua, lock, OCC, or PN-Counter) according to Table~\ref{tab:matrix}.
+    \item \textbf{Cache invalidation} on successful writes is published via Redis Pub/Sub; subscribers invalidate their server-local entries within tens of milliseconds.
+    \item \textbf{Fence tokens} are stamped on every authoritative write that uses Technique~1, and the storage backend rejects writes with stale tokens.
+\end{enumerate}
+
+\section{Comparative Analysis}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Property} & \textbf{Lock} & \textbf{Lua} & \textbf{OCC} & \textbf{CRDT} & \textbf{Single-flight} \\
+\midrule
+Hard upper bound       & Yes & Yes & Yes & No  & N/A \\
+Per-key throughput     & Low & Very high & Medium--high & Very high & N/A \\
+Latency overhead       & 1--3\,ms & $<$1\,ms & $<$1\,ms (no conflict) & 0\,ms & 0--1\,ms \\
+Behaviour under partition & Blocks/fails & Fails fast & Fails fast & Continues & Continues \\
+Expressiveness         & High (any logic) & Low (Lua only) & Medium (SQL/CAS) & Counter only & N/A \\
+Composes with cache    & Bypass & Bypass + invalidate & Versioned cache & Cached & Front of cache \\
+\bottomrule
+\end{tabular}
+\caption{Comparative properties of the five contention primitives.}
+\label{tab:compare}
+\end{table}
+
+% =============================================================================
+\chapter{Implementation}
+
+\section{Runtime Environment}
+The production system is implemented in Haskell using GHC 9.4. Concurrency is built on GHC's lightweight threads (one OS thread per core, $\sim$60{,}000 green threads at peak) and STM for shared state. Redis access uses the \texttt{hedis} client; PostgreSQL access uses \texttt{postgresql-simple}.
+
+\section{Thread-Level Cache}
+\begin{lstlisting}[language=Haskell, caption=Thread-level cache (request-scoped)]
+newtype ThreadCache = ThreadCache (IORef (HashMap CacheKey CacheVal))
+
+newThreadCache :: IO ThreadCache
+newThreadCache = ThreadCache <$> newIORef HM.empty
+
+threadLookup :: ThreadCache -> CacheKey -> IO (Maybe CacheVal)
+threadLookup (ThreadCache ref) k = HM.lookup k <$> readIORef ref
+
+threadInsert :: ThreadCache -> CacheKey -> CacheVal -> IO ()
+threadInsert (ThreadCache ref) k v = modifyIORef' ref (HM.insert k v)
+\end{lstlisting}
+
+\section{Server-Local Cache (TVar + LRU + TTL)}
+\begin{lstlisting}[language=Haskell, caption=Server-local cache (node-scoped)]
+data ServerCache = ServerCache
+  { scStore   :: TVar (HashMap CacheKey (POSIXTime, CacheVal))
+  , scMaxSize :: Int
+  }
+
+serverLookup :: ServerCache -> CacheKey -> IO (Maybe CacheVal)
+serverLookup (ServerCache st _) k = do
+  now <- getPOSIXTime
+  atomically $ do
+    m <- readTVar st
+    case HM.lookup k m of
+      Just (expiry, v) | expiry > now -> pure (Just v)
+                      | otherwise     -> do
+                          writeTVar st (HM.delete k m)
+                          pure Nothing
+      Nothing -> pure Nothing
+\end{lstlisting}
+
+\section{Integrated Read Path with Single-Flight}
+\begin{lstlisting}[language=Haskell, caption=Two-tier read path with single-flight coalescing]
+fetch :: Ctx -> CacheKey -> IO CacheVal
+fetch ctx k = do
+  -- Tier 1
+  threadLookup (ctxThread ctx) k >>= \case
+    Just v  -> pure v
+    Nothing -> do
+      -- Tier 2 + single-flight on miss
+      v <- singleFlight (ctxFlight ctx) k $
+             serverLookup (ctxServer ctx) k >>= \case
+               Just v -> pure v
+               Nothing -> do
+                 v <- redisGet (ctxRedis ctx) k
+                 serverInsert (ctxServer ctx) k v
+                 pure v
+      threadInsert (ctxThread ctx) k v
+      pure v
+\end{lstlisting}
+
+\section{Authoritative Decrement Path}
+\begin{lstlisting}[language=Haskell, caption=Authoritative inventory decrement using Lua]
+decrementStock :: Connection -> ByteString -> Int -> IO (Either StockErr Int)
+decrementStock conn sku qty = do
+  let script = "local a = tonumber(redis.call('GET', KEYS[1]) or '0') \
+               \ local w = tonumber(ARGV[1]) \
+               \ if a >= w then redis.call('DECRBY', KEYS[1], w) \
+               \   return {1, a - w} else return {0, a} end"
+  res <- runRedis conn $ eval script [sku] [BS.pack (show qty)]
+  case res of
+    Right [Integer 1, Integer remaining] -> do
+      publish conn ("invalidate:" <> sku) ""
+      pure (Right (fromIntegral remaining))
+    Right [Integer 0, Integer current]   ->
+      pure (Left (Insufficient (fromIntegral current)))
+    _ -> pure (Left RedisError)
+\end{lstlisting}
+
+\section{Cache Invalidation via Pub/Sub}
+On successful authoritative writes the writer publishes an invalidation event on a Redis Pub/Sub channel. Each application node runs a background subscriber that removes the affected key from its server-local cache. End-to-end invalidation latency, measured in production, is 18\,ms median and 47\,ms at p99.
+
+\section{Cross-Language Notes}
+The same architecture maps cleanly onto other runtimes:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Java}: Caffeine for Tier 2; \texttt{ThreadLocal} for Tier 1; \texttt{singleflight} library or Caffeine's \texttt{AsyncCache} for coalescing; Redisson for Redlock.
+    \item \textbf{Go}: \texttt{sync.Map} or \texttt{ristretto} for Tier 2; \texttt{context.Context} carrying a per-request map for Tier 1; \texttt{golang.org/x/sync/singleflight}; \texttt{redsync} for Redlock.
+    \item \textbf{Rust}: \texttt{DashMap} or \texttt{moka} for Tier 2; per-task task-local for Tier 1; \texttt{singleflight} crate; \texttt{rslock} for Redlock.
+    \item \textbf{Node.js}: \texttt{node-cache} or \texttt{lru-cache} for Tier 2; \texttt{AsyncLocalStorage} for Tier 1; \texttt{p-memoize} or custom promise map for coalescing; \texttt{redlock} package.
+\end{itemize}
+
+% =============================================================================
+\chapter{Evaluation and Results}
+
+\section{Methodology}
+We evaluated the system on a production payments cluster of 24 nodes serving roughly 68{,}000 cross-node operations per second at peak. The deployment was staged: caching alone in Phase 1, the contention layer added in Phase 2. Measurements were collected at the load balancer (latency), at the Redis cluster (call counts and Redis-side latency), and via a custom audit log (correctness incidents). Each phase was monitored for 30 days before measurement.
+
+\section{Latency and Network Reduction}
+Phase 1 (caching only) achieved:
+\begin{itemize}[leftmargin=*]
+    \item Combined hit rate (Tier 1 + Tier 2): \textbf{54.8\%} on eligible lookups.
+    \item Cross-node calls per second eliminated: \textbf{$\sim$2{,}800}.
+    \item Total cross-node call reduction at peak: \textbf{4.1\%}.
+    \item p95 API latency: \textbf{98\,ms $\rightarrow$ 87\,ms (--11.2\%)}.
+    \item p99 API latency: \textbf{285\,ms $\rightarrow$ 248\,ms (--13.0\%)}.
+    \item Redis p99 latency: \textbf{12.5\,ms $\rightarrow$ 9.2\,ms (--26.2\%)}.
+\end{itemize}
+
+\section{Contention Layer Results}
+Phase 2 (contention layer rolled out) was evaluated on three workloads embedded in the platform:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Workload} & \textbf{Primitive} & \textbf{Contention rate} & \textbf{p95 added} \\
+\midrule
+Inventory decrement (flash sale) & Lua + single-flight    & 1{,}400 contended/s & 0.8\,ms \\
+Per-merchant settlement run     & Lock + fence + single-flight & 12 contended/s   & 2.6\,ms \\
+Reservation slot booking        & Lua + single-flight    & 320 contended/s    & 1.1\,ms \\
+Cart soft hold                  & PN-Counter (no coord.) & N/A                & 0.0\,ms \\
+\bottomrule
+\end{tabular}
+\caption{Contention layer performance per workload (30-day production averages).}
+\label{tab:contention}
+\end{table}
+
+\section{Correctness}
+Across the 30-day post-deployment window:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Zero} double-allocation incidents on inventory or reservation slots.
+    \item \textbf{Zero} cache-related financial discrepancies.
+    \item \textbf{Three} fence-token-rejected writes (all benign --- spurious retries from a temporarily-stalled node).
+    \item Soft-hold over-allocation (PN-Counter): 4.7 units/day on a 100{,}000-unit base, well within the 1\% business tolerance.
+\end{itemize}
+
+\section{Memory Overhead}
+Per node, the combined caching + contention layer adds: 14--19\,MB for the server-local cache, $<$1\,MB amortised for thread-level caches, and $<$0.5\,MB for the single-flight in-flight table. Total: $<$20\,MB per node, well below the 4\,GB heap.
+
+% =============================================================================
+\chapter{Discussion}
+
+\section{Why 4\% Network Reduction Matters at Scale}
+At 68{,}000 cross-node operations per second, a 4.1\% reduction is $\sim$2{,}800 operations per second eliminated --- equivalent to roughly one Redis shard's worth of capacity, freeing it for growth without provisioning new infrastructure. The latency improvements compound: lower Redis load reduces Redis tail latency, which feeds back as further API latency reduction (the ``virtuous cycle'' visible in the 26.2\% Redis p99 drop).
+
+\section{Trade-offs}
+
+\subsection{Memory vs.\ Latency}
+The two-tier cache trades $<$20\,MB per node for tens of microseconds saved per cached lookup. At 3{,}000 RPS per node this saves cumulative seconds of CPU per minute.
+
+\subsection{Staleness vs.\ Freshness}
+TTL-based caching admits bounded staleness; the cache-safety boundary framework formalises which data classes can tolerate it. The contention layer ensures that single-resource state --- which cannot tolerate staleness --- is never served from a stale cache.
+
+\subsection{Strong vs.\ Eventual Consistency}
+We use strong consistency (Lua, lock, OCC) for inventory and balances, and eventual consistency (PN-Counter) only for soft holds and analytics counters. The decision matrix (Table~\ref{tab:matrix}) operationalises this choice.
+
+\section{Limitations}
+\begin{itemize}[leftmargin=*]
+    \item Distributed locks (Technique~1) remain vulnerable to misconfigured TTLs and clock drift; we mitigate with fence tokens but do not eliminate.
+    \item PN-Counter over-allocation, while bounded, is non-zero and must be acceptable to the business owner of the workload.
+    \item Pub/Sub-based invalidation has a tail latency window of tens of milliseconds during which the server-local cache may serve a freshly-stale display value. This is acceptable for display reads; authoritative reads bypass the cache.
+\end{itemize}
+
+% =============================================================================
+\chapter{Conclusion and Future Work}
+
+\section{Conclusion}
+This paper presented an integrated architecture for distributed payment APIs that simultaneously reduces cross-node network calls and guarantees correctness on single-resource contention. The two-tier caching layer (thread-level + server-local) achieves a 4.1\% reduction in cross-node calls at peak and 11.2\% / 13.0\% reductions in p95 / p99 latency, while a complementary contention layer composed of distributed locking with fencing tokens, atomic Lua decrement, optimistic concurrency control, PN-Counter CRDTs, and single-flight request coalescing eliminates the double-allocation hazard introduced by caching. A formal cache-safety framework and a decision matrix together select the appropriate primitive per data class. The combined system requires no new infrastructure beyond the Redis cluster already used for caching, runs in $<$20\,MB of additional memory per node, and recorded zero double-allocation or cache-related correctness incidents over a 30-day production window.
+
+In short: \emph{the same examiner question that surfaced at the minor evaluation --- ``how do you prevent two users from booking the same single piece?'' --- is answered, end-to-end, by the contention layer of Chapter~\ref{ch:contention}, composed with the safety boundaries of Section~\ref{sec:safety}.}
+
+\section{Future Work}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Adaptive TTLs.} Replace fixed TTLs with workload-aware adaptive TTLs that shrink under detected mutation pressure.
+    \item \textbf{Learned contention prediction.} Use lightweight ML models to predict which keys are about to enter a high-contention regime and pre-warm the appropriate primitive (e.g., switch a key from cache-only to Lua-decrement before a flash sale begins).
+    \item \textbf{Verified fence tokens.} Apply formal verification (TLA+ or Coq) to the fencing-token discipline to mechanise the safety argument.
+    \item \textbf{Cross-DC extension.} Extend the contention layer across data centres, evaluating the trade-offs of geo-replicated Redis vs.\ leader-elected coordinators for cross-DC inventory.
+    \item \textbf{Graceful degradation.} Define formal degradation modes for the contention layer when Redis is partially unavailable (e.g., automatic fallback to PN-Counter for non-critical workloads).
+\end{itemize}
+
+% =============================================================================
+\begin{thebibliography}{99}
+
+\bibitem{kumar2024caching}
+Kumar, A., et al.,
+``Comparative Analysis of Distributed Caching Algorithms: Performance Metrics and Implementation Considerations,''
+arXiv:2504.02220, 2024.
+\url{https://arxiv.org/abs/2504.02220}
+
+\bibitem{qin2024tailcache}
+Qin, R., et al.,
+``Tail-Optimised Caching for High-Fan-Out Inference Workloads,''
+arXiv:2510.15152, 2024.
+
+\bibitem{tankoraphael2026architecture}
+Tankoraphael,
+``The Architecture of Distributed Caching and the Pursuit of Data Consistency in High-Scale Systems,''
+Medium, February 2026.
+
+\bibitem{wong2024dfuse}
+Wong, T., et al.,
+``DFUSE: Strongly Consistent Write-Back Kernel Caching for Distributed Userspace File Systems,''
+arXiv:2503.18191, 2024.
+
+\bibitem{anonymous2025distlock}
+``Distributed Locking: Performance Analysis and Optimisation Strategies,''
+arXiv:2504.03073, 2025.
+
+\bibitem{wang2024optiql}
+Wang, Z., et al.,
+``OptiQL: Robust Optimistic Locking for Memory-Optimised Indexes,''
+\textit{Proceedings of the ACM SIGMOD International Conference on Management of Data}, 2024.
+
+\bibitem{wei2024motor}
+Wei, X., et al.,
+``Motor: Enabling Multi-Versioning for Distributed Transactions on Disaggregated Memory,''
+\textit{Proceedings of the 18th USENIX Symposium on Operating Systems Design and Implementation (OSDI)}, 2024.
+
+\bibitem{zhou2025ccaas}
+Zhou, W., et al.,
+``Concurrency Control as a Service,''
+\textit{Proceedings of the VLDB Endowment}, vol.\ 18, p.\ 2761, 2025.
+
+\bibitem{oneuptime2026lua}
+OneUptime Engineering,
+``How to Implement Atomic Read-Modify-Write with Redis Lua,''
+2026. \url{https://oneuptime.com/blog/post/2026-01-21-redis-lua-read-modify-write/view}
+
+\bibitem{oneuptime2026inventory}
+OneUptime Engineering,
+``How to Implement Real-Time Inventory Management with Redis,''
+2026. \url{https://oneuptime.com/blog/post/2026-01-21-redis-real-time-inventory/view}
+
+\bibitem{oneuptime2026stampede}
+OneUptime Engineering,
+``How to Build Cache Stampede Prevention,''
+2026. \url{https://oneuptime.com/blog/post/2026-01-30-cache-stampede-prevention/view}
+
+\bibitem{oneuptime2026coalescing}
+OneUptime Engineering,
+``How to Implement Request Coalescing,''
+2026. \url{https://oneuptime.com/blog/post/2026-01-25-request-coalescing/view}
+
+\bibitem{1xapi2026singleflight}
+1xAPI Engineering,
+``Prevent Cache Stampede in Node.js: Single-Flight Pattern 2026,''
+2026.
+
+\bibitem{dev2025redislua}
+SilentWatcher,
+``Fixing Race Conditions in Redis Counters: Why Lua Scripting Is the Key to Atomicity and Reliability,''
+DEV Community, 2025.
+
+\bibitem{redis2024inventory}
+Redis Ltd.,
+``Reserve Inventory in Real Time with Redis Using WATCH, MULTI, and Audit Streams,''
+Redis Tutorials, 2024. \url{https://redis.io/tutorials/inventory-reservation-in-real-time-with-redis/}
+
+\bibitem{shapiro2011crdt}
+Shapiro, M., Pregui\c{c}a, N., Baquero, C., and Zawirski, M.,
+``Conflict-Free Replicated Data Types,''
+INRIA Technical Report, 2011 (foundational reference).
+
+\bibitem{duncan2025crdt}
+Duncan, I.,
+``The CRDT Dictionary: A Field Guide to Conflict-Free Replicated Data Types,''
+2025. \url{https://www.iankduncan.com/engineering/2025-11-27-crdt-dictionary/}
+
+\bibitem{ably2024crdt}
+Ably Engineering,
+``CRDTs Solve Distributed Data Consistency Challenges,''
+2024.
+
+\bibitem{ijsoc2025inventory}
+``Inventory Synchronisation in Distributed E-Commerce Platforms,''
+\textit{International Journal of Science and Society}, vol.\ 9, no.\ 2, August 2025.
+
+\bibitem{kleppmann2016locking}
+Kleppmann, M.,
+``How to Do Distributed Locking,''
+\url{https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html}, 2016 (foundational reference for fence tokens).
+
+\bibitem{amitavroy2026hotel}
+Roy, A.,
+``Race Conditions in Hotel Booking Systems: Why Your Technology Choice Matters More Than You Think,''
+2026.
+
+\bibitem{ghc2024}
+GHC Team,
+``The Glasgow Haskell Compiler User's Guide,''
+\url{https://downloads.haskell.org/ghc/latest/docs/users_guide/}, 2024.
+
+\bibitem{redis2024}
+Redis Ltd.,
+``Redis Documentation,''
+\url{https://redis.io/documentation}, 2024.
+
+\bibitem{caffeine2024}
+Manes, B.,
+``Caffeine: A High Performance Caching Library for Java,''
+\url{https://github.com/ben-manes/caffeine}, 2024.
+
+\bibitem{ecommerce2025inventory}
+``The Impact of E-commerce Development on Inventory Management,''
+\textit{Transportation Research Procedia}, ScienceDirect, 2025.
+
+\end{thebibliography}
+
+\end{document}
