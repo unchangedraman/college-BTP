@@ -66,52 +66,71 @@
 % ---------- Hyperref ----------
 \hypersetup{
     colorlinks=true,
-    linkcolor=black,
-    citecolor=blue,
-    urlcolor=blue,
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black,
     pdftitle={Reducing Cross-Node Network Calls in Distributed Payment Systems},
     pdfauthor={Raman Kapoor}
 }
 
+% ---------- Headers ----------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\leftmark}
+\fancyhead[R]{\small Research Paper}
+\fancyfoot[C]{\thepage}
+
 % =============================================================================
 \begin{document}
 
-% ---------- Title page ----------
+% ---------- Custom Title Page (matches minor evaluation report) ------------
 \begin{titlepage}
-    \centering
-    \vspace*{1cm}
-    {\LARGE \textbf{Reducing Cross-Node Network Calls in Distributed Payment Systems via Thread-Level and Server-Local Caching}}\\[0.4cm]
-    {\large \textit{with Concurrency-Safe Resolution of Single-Resource Contention}}\\[1.5cm]
-    {\large B.Tech Project Report --- Major Evaluation}\\[2cm]
-    \begin{minipage}[t]{0.45\textwidth}
-        \raggedright
-        \textbf{Submitted by:}\\[0.3cm]
-        Raman Kapoor\\
-        % Enrollment No.: XXXX-XXX
-    \end{minipage}
-    \hfill
-    \begin{minipage}[t]{0.45\textwidth}
-        \raggedleft
-        \textbf{Under the guidance of:}\\[0.3cm]
-        Dr.\ Vivek Kumar Singh
-    \end{minipage}
+\centering
 
-    \vfill
-    {\large ABV-IIITM Gwalior}\\[0.2cm]
-    {\normalsize Atal Bihari Vajpayee Indian Institute of Information Technology and Management}\\[0.5cm]
-    {\normalsize 2026}
+\vspace*{1cm}
+{\Large\bfseries ABV -- Indian Institute of Information Technology\\
+and Management, Gwalior}\\[1.5cm]
+
+{\LARGE\bfseries B.Tech Project (BTP)}\\[0.4cm]
+{\Large End-Term Evaluation Report}\\[1.5cm]
+
+{\large\bfseries Reducing Cross-Node Network Calls in\\
+Distributed Payment Systems via\\
+Thread-Level and Server-Local Caching}\\[2cm]
+
+\hrule
+\vspace{1cm}
+
+\begin{minipage}[t]{0.45\textwidth}
+\raggedright
+\textbf{Submitted by:}\\[0.3cm]
+Raman Kapoor\\
+% Enrollment No.: XXXX-XXX
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\textwidth}
+\raggedleft
+\textbf{Under the guidance of:}\\[0.3cm]
+Dr.\ Vivek Kumar Singh
+\end{minipage}
+
+\vfill
+{\large ABV-IIITM Gwalior}
+
 \end{titlepage}
 
 % ---------- Abstract ----------
-\chapter*{Abstract}
-\addcontentsline{toc}{chapter}{Abstract}
-
+\begin{abstract}
 Distributed payment systems serving millions of daily transactions face two intertwined challenges: redundant cross-node network calls that inflate p95/p99 tail latency, and concurrent contention on single, indivisible resources (e.g., a last available inventory unit, a unique reservation slot, a rate-limited gateway token) that must never be allocated twice. Each API request typically triggers 5--15 lookups to remote stores for merchant configurations, routing tables, feature flags and transaction metadata, even when much of this data is immutable within a request or over a short window. At the same time, the very caching layers introduced to reduce network hops can re-introduce correctness hazards: stale reads, lost updates, and double-allocations under high concurrency.
 
-This paper proposes an integrated two-layer architecture. The \textbf{caching layer} consists of (1) a \emph{thread-level cache} that eliminates redundant data fetches within a single request's execution context and (2) a \emph{server-local cache} that absorbs cross-request lookups for immutable, configuration-class data. The \textbf{contention layer} layers five complementary safety mechanisms over the cache to handle single-resource booking correctly: \emph{distributed locking with fencing tokens}, \emph{atomic decrement via Redis Lua scripts}, \emph{optimistic concurrency control with versioned cache entries}, \emph{CRDT-based PN-Counters for eventually-consistent reservations}, and \emph{single-flight request coalescing}. We define formal cache-safety boundaries that govern which data classes are eligible for caching, and a decision matrix that selects the right contention primitive per data class. Evaluation on a production payments platform handling roughly 68{,}000 cross-node operations per second shows a \textbf{4.1\% reduction in cross-node network calls at peak}, an \textbf{11.2\% reduction in p95 latency} and a \textbf{13.0\% reduction in p99 latency}, with \textbf{zero double-allocation incidents} after the contention layer was rolled out. The combined approach is lightweight, requires no new infrastructure beyond a Redis cluster already present for caching, and is portable across language runtimes.
+This paper proposes an integrated two-layer architecture. The \textbf{caching layer} consists of (1)~a \textbf{thread-level cache} that eliminates redundant data fetches within a single request's execution context and (2)~a \textbf{server-local cache} that absorbs cross-request lookups for immutable, configuration-class data. The \textbf{contention layer} layers five complementary safety mechanisms over the cache to handle single-resource booking correctly: \emph{distributed locking with fencing tokens}, \emph{atomic decrement via Redis Lua scripts}, \emph{optimistic concurrency control with versioned cache entries}, \emph{CRDT-based PN-Counters for eventually-consistent reservations}, and \emph{single-flight request coalescing}. We define formal cache-safety boundaries that govern which data classes are eligible for caching, and a decision matrix that selects the right contention primitive per data class. Evaluation on a production payments platform handling roughly 68{,}000 cross-node operations per second shows a \textbf{4.1\% reduction in cross-node network calls at peak}, an \textbf{11.2\% reduction in p95 latency} and a \textbf{13.0\% reduction in p99 latency}, with \textbf{zero double-allocation incidents} after the contention layer was rolled out. The combined approach is lightweight, requires no new infrastructure beyond a Redis cluster already present for caching, and is portable across language runtimes.
+\end{abstract}
 
-% ---------- TOC ----------
+% ---------- TOC, LoF, LoT ----------
 \tableofcontents
+\listoffigures
+\listoftables
+\newpage
 
 % =============================================================================
 \chapter{Introduction and Problem Statement}
@@ -375,24 +394,67 @@ Even if the underlying backend uses any of Techniques 1--4, single-flight collap
 
 It is important to note, however, that single-flight is \emph{not} a replacement for atomicity --- it merely deduplicates simultaneous attempts on the same node. Two requests on different nodes can still race, so single-flight must be composed with one of Techniques 1--4 (typically Technique 2) for full safety.
 
-\section{Decision Matrix and Hybrid Architecture}
+\section{Hybrid Architecture}
+
+Figure~\ref{fig:contention} illustrates how a request flows through the integrated two-layer system.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    node distance=1.0cm and 1.4cm,
+    box/.style={rectangle, draw, rounded corners, minimum height=0.9cm, minimum width=2.7cm, align=center, font=\small, fill=blue!5},
+    decision/.style={diamond, draw, aspect=2.2, inner sep=1pt, align=center, font=\scriptsize, fill=yellow!10},
+    primitive/.style={rectangle, draw, minimum height=0.9cm, minimum width=2.6cm, align=center, font=\scriptsize, fill=green!8},
+    arrow/.style={-Stealth, thick}
+]
+    \node[box] (req) {Incoming\\Request};
+    \node[box, right=of req] (t1) {Tier-1\\Thread Cache};
+    \node[decision, right=of t1] (op) {Read or\\authoritative\\write?};
+
+    \node[box, above right=0.3cm and 1.2cm of op] (sf) {Single-Flight\\Coalescer};
+    \node[box, right=of sf] (t2) {Tier-2\\Server Cache};
+    \node[box, right=of t2] (redis) {Redis /\\Backend};
+
+    \node[primitive, below right=0.3cm and 1.2cm of op] (lua) {Lua atomic\\decrement};
+    \node[primitive, right=of lua] (lock) {Lock + fence\\token};
+    \node[primitive, right=of lock] (occ) {OCC\\(versioned)};
+
+    \draw[arrow] (req) -- (t1);
+    \draw[arrow] (t1) -- (op);
+    \draw[arrow] (op.north) -- node[above left, font=\scriptsize]{read} (sf.west);
+    \draw[arrow] (op.south) -- node[below left, font=\scriptsize]{write} (lua.west);
+    \draw[arrow] (sf) -- (t2);
+    \draw[arrow] (t2) -- (redis);
+    \draw[arrow] (lua) -- (redis.south);
+    \draw[arrow] (lock) -- (redis.south);
+    \draw[arrow] (occ) -- (redis.south);
+    \draw[arrow, dashed] (redis) to[bend left=35] node[above, font=\scriptsize]{invalidate (Pub/Sub)} (t2);
+\end{tikzpicture}
+\caption{Integrated two-layer architecture. Reads traverse Tier-1, single-flight coalescer, Tier-2, and only on Tier-2 miss reach Redis. Authoritative writes bypass the cache and select an appropriate contention primitive (Lua, lock+fence, or OCC). Successful writes publish invalidation events that propagate back to Tier-2.}
+\label{fig:contention}
+\end{figure}
+
+\subsection{Decision Matrix}
+Table~\ref{tab:matrix} maps each data class to its cache tier and contention primitive.
 
 \begin{table}[h]
 \centering
-\small
-\begin{tabular}{lcccc}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{p{3.4cm}p{1.7cm}p{2.5cm}p{2.0cm}p{2.6cm}}
 \toprule
 \textbf{Data class} & \textbf{Cache?} & \textbf{Primary} & \textbf{Coalescing} & \textbf{Notes} \\
 \midrule
-Merchant config (read)        & Yes (Tier-2)  & ---                  & Single-flight & Cache-eligible \\
-Routing table (read)          & Yes (Tier-2)  & ---                  & Single-flight & Cache-eligible \\
-Feature flag (read)           & Yes (Tier-2)  & ---                  & Single-flight & Cache-eligible \\
-Inventory (read display)      & Yes (Tier-2)  & ---                  & Single-flight & Marked approximate \\
-Inventory (decrement)         & No            & Lua atomic           & Single-flight & Hard limit \\
-Account balance debit         & No            & Distributed lock     & Single-flight & Coarse, fence token \\
-Reservation slot              & No            & Lua atomic           & Single-flight & Per-slot key \\
-Soft hold (cart)              & Tier-2        & PN-Counter           & ---           & Over-allocation OK \\
-Merchant config (write)       & Invalidate    & OCC versioned        & ---           & Low contention \\
+Merchant config (read)   & Yes (Tier-2) & ---              & Single-flight & Cache-eligible \\
+Routing table (read)     & Yes (Tier-2) & ---              & Single-flight & Cache-eligible \\
+Feature flag (read)      & Yes (Tier-2) & ---              & Single-flight & Cache-eligible \\
+Inventory (read display) & Yes (Tier-2) & ---              & Single-flight & Marked approximate \\
+Inventory (decrement)    & No           & Lua atomic       & Single-flight & Hard limit \\
+Account balance debit    & No           & Distributed lock & Single-flight & Coarse, fence token \\
+Reservation slot         & No           & Lua atomic       & Single-flight & Per-slot key \\
+Soft hold (cart)         & Tier-2       & PN-Counter       & ---           & Over-allocation OK \\
+Merchant config (write)  & Invalidate   & OCC versioned    & ---           & Low contention \\
 \bottomrule
 \end{tabular}
 \caption{Decision matrix mapping data classes to cache tier and primary contention primitive.}
@@ -411,19 +473,23 @@ Merchant config (write)       & Invalidate    & OCC versioned        & ---      
 
 \begin{table}[h]
 \centering
-\small
-\begin{tabular}{lccccc}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{p{3.4cm}p{2.0cm}p{2.4cm}p{2.6cm}p{1.8cm}p{2.2cm}}
 \toprule
 \textbf{Property} & \textbf{Lock} & \textbf{Lua} & \textbf{OCC} & \textbf{CRDT} & \textbf{Single-flight} \\
 \midrule
-Hard upper bound       & Yes & Yes & Yes & No  & N/A \\
-Per-key throughput     & Low & Very high & Medium--high & Very high & N/A \\
-Latency overhead       & 1--3\,ms & $<$1\,ms & $<$1\,ms (no conflict) & 0\,ms & 0--1\,ms \\
-Behaviour under partition & Blocks/fails & Fails fast & Fails fast & Continues & Continues \\
-Expressiveness         & High (any logic) & Low (Lua only) & Medium (SQL/CAS) & Counter only & N/A \\
-Composes with cache    & Bypass & Bypass + invalidate & Versioned cache & Cached & Front of cache \\
+Hard upper bound          & Yes              & Yes                  & Yes                    & No        & N/A \\
+Per-key throughput        & Low              & Very high            & Medium--high           & Very high & N/A \\
+Latency overhead          & 1--3\,ms         & $<$1\,ms             & $<$1\,ms (no conflict) & 0\,ms     & 0--1\,ms \\
+Behaviour under partition & Blocks / fails   & Fails fast           & Fails fast             & Continues & Continues \\
+Expressiveness            & High (any logic) & Low (Lua only)       & Medium (SQL / CAS)     & Counter only & N/A \\
+Composes with cache       & Bypass           & Bypass + invalidate  & Versioned cache        & Cached    & Front of cache \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \caption{Comparative properties of the five contention primitives.}
 \label{tab:compare}
 \end{table}
@@ -540,17 +606,21 @@ Phase 2 (contention layer rolled out) was evaluated on three workloads embedded 
 
 \begin{table}[h]
 \centering
-\small
-\begin{tabular}{lccc}
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.15}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{p{4.6cm}p{4.4cm}p{3.3cm}p{2.0cm}}
 \toprule
 \textbf{Workload} & \textbf{Primitive} & \textbf{Contention rate} & \textbf{p95 added} \\
 \midrule
-Inventory decrement (flash sale) & Lua + single-flight    & 1{,}400 contended/s & 0.8\,ms \\
-Per-merchant settlement run     & Lock + fence + single-flight & 12 contended/s   & 2.6\,ms \\
-Reservation slot booking        & Lua + single-flight    & 320 contended/s    & 1.1\,ms \\
-Cart soft hold                  & PN-Counter (no coord.) & N/A                & 0.0\,ms \\
+Inventory decrement (flash sale) & Lua + single-flight          & 1{,}400 contended/s & 0.8\,ms \\
+Per-merchant settlement run      & Lock + fence + single-flight & 12 contended/s      & 2.6\,ms \\
+Reservation slot booking         & Lua + single-flight          & 320 contended/s     & 1.1\,ms \\
+Cart soft hold                   & PN-Counter (no coord.)       & N/A                 & 0.0\,ms \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \caption{Contention layer performance per workload (30-day production averages).}
 \label{tab:contention}
 \end{table}
