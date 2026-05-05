@@ -440,7 +440,7 @@ CRDTs eliminate coordination latency entirely (writes are local, never blocked) 
 \subsection{Mechanism}
 Single-flight (also called request coalescing) ensures that concurrent requests for the same key share a \emph{single} backend call. The first request acquires an in-flight slot and issues the call; all later requests for the same key during the window block on the slot's promise and receive the same response~\cite{1xapi2026singleflight, oneuptime2026stampede, oneuptime2026coalescing}.
 
-\begin{lstlisting}[language=Haskell, caption=Single-flight wrapper around a backend fetch (Haskell, STM)]
+\begin{lstlisting}[language=Haskell, caption={Single-flight wrapper around a backend fetch (Haskell, STM)}]
 data SingleFlight k v = SingleFlight (TVar (HashMap k (TMVar (Either SomeException v))))
 
 singleFlight :: (Eq k, Hashable k)
