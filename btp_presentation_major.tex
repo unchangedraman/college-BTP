@@ -217,7 +217,7 @@ A \textbf{contention layer} that composes with the cache and provably prevents d
 \section{The Contention Layer: Five Primitives}
 % ============================================================
 
-\begin{frame}{Primitive 1 --- Distributed Locking with Fencing Tokens}
+\begin{frame}[fragile]{Primitive 1 --- Distributed Locking with Fencing Tokens}
 \begin{itemize}
     \item Acquire a per-resource lock (Redlock on Redis, etcd lease) before read-modify-write
     \item \textbf{Fence token:} monotonically increasing number returned with the lock; backend rejects stale-token writes
@@ -234,7 +234,7 @@ withLock conn key ttl $ \tok -> do
 \textbf{Use when:} business logic is non-trivial; contention is moderate; the critical section calls external services.
 \end{frame}
 
-\begin{frame}{Primitive 2 --- Atomic Decrement via Redis Lua}
+\begin{frame}[fragile]{Primitive 2 --- Atomic Decrement via Redis Lua}
 \textbf{Idea:} package the entire ``check + decrement'' in one Lua script. Redis runs scripts atomically.
 \begin{block}{Lua}
 \begin{lstlisting}[language={[5.2]Lua}]
@@ -255,7 +255,7 @@ end
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Primitive 3 --- OCC with Versioned Cache Entries}
+\begin{frame}[fragile]{Primitive 3 --- OCC with Versioned Cache Entries}
 \begin{itemize}
     \item Each cache entry carries a version
     \item Reader records the version; writer issues a CAS (\texttt{WHERE version = ?})
@@ -402,15 +402,15 @@ Composes with cache       & Bypass           & Bypass + invalidate  & Versioned 
     width=12cm, height=6.5cm,
     enlarge x limits=0.18,
     ylabel={Latency (ms)},
-    symbolic x coords={p50 API, p95 API, p99 API, Redis p99},
-    xtick=data,
+    xtick={1,2,3,4},
+    xticklabels={p50 API, p95 API, p99 API, Redis p99},
     nodes near coords, nodes near coords style={font=\scriptsize},
     ymin=0,
     legend style={at={(0.5,-0.20)}, anchor=north, legend columns=2, font=\small, draw=none},
     grid=major, grid style={dashed, gray!30}
 ]
-\addplot[fill=red!50!white, draw=red!70!black]   coordinates {(p50 API,28) (p95 API,98) (p99 API,285) (Redis p99,12.5)};
-\addplot[fill=green!55!white, draw=green!50!black] coordinates {(p50 API,26) (p95 API,87) (p99 API,248) (Redis p99,9.2)};
+\addplot[fill=red!50!white, draw=red!70!black]    coordinates {(1,28) (2,98) (3,285) (4,12.5)};
+\addplot[fill=green!55!white, draw=green!50!black] coordinates {(1,26) (2,87) (3,248) (4,9.2)};
 \legend{Baseline, After Phase 1}
 \end{axis}
 \end{tikzpicture}%
