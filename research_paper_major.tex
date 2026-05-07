@@ -67,8 +67,8 @@
 
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\nouppercase{\footnotesize\bfseries\leftmark}}
-\fancyhead[R]{\nouppercase{\footnotesize\bfseries\rightmark}}
+\fancyhead[L]{\nouppercase{\scriptsize\bfseries\leftmark}}
+\fancyhead[R]{\nouppercase{\scriptsize\bfseries\rightmark}}
 \fancyfoot[C]{\bfseries\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 \setlength{\headheight}{15pt}
@@ -213,7 +213,7 @@ This report proposes an integrated two-layer architecture. The \textbf{caching l
 \pagenumbering{arabic}
 
 % ----------- CHAPTER 1 -----------
-\chapter{Introduction and Problem Statement}
+\chapter[Introduction]{Introduction and Problem Statement}
 \label{chap:intro}
 \vspace{-1cm}
 \noindent \rule{6.6in}{0.01in}
@@ -248,22 +248,22 @@ This paper makes the following contributions:
 \vspace{-1cm}
 \noindent \rule{6.6in}{0.01in}
 
-\section{Tail Latency and Distributed Caching}
+\section[Tail Latency]{Tail Latency and Distributed Caching}
 The classical formulation of tail-latency amplification in large fan-out systems is due to Dean and Barroso, but recent comparative work has refined our understanding of how caching policies interact with the tail. Kumar et al.~\cite{kumar2024caching} present a 2024 comparative analysis of distributed caching algorithms across throughput, hit rate, and tail latency, finding that eventual-consistency caches achieve 3--5$\times$ higher throughput than strongly-consistent variants in read-dominated workloads. Qin et al.~\cite{qin2024tailcache} explore tail-optimised caching for high-fan-out inference workloads, demonstrating that policies designed for hit rate alone can paradoxically worsen p99 latency.
 
-\section{In-Process and Multi-Tier Caches}
+\section[Multi-Tier Caches]{In-Process and Multi-Tier Caches}
 The trade-off between in-process and distributed caches has been examined extensively, both in industrial practice (Twitter, Cloudflare, Netflix) and in recent academic work. Tankoraphael~\cite{tankoraphael2026architecture} surveys 2026-vintage industry practice on multi-tier cache hierarchies and consistency, while DFUSE~\cite{wong2024dfuse} demonstrates that strongly-consistent write-back caching is achievable in distributed userspace file systems with carefully bounded staleness windows.
 
-\section{Concurrency Control and Distributed Locking}
+\section[Concurrency Control]{Concurrency Control and Distributed Locking}
 Concurrency control for single-resource contention has seen renewed attention. The recent arXiv survey of distributed locking~\cite{anonymous2025distlock} reports up to 68\% throughput improvements for modern distributed lock protocols over centralised baselines under high contention. \emph{OptiQL}~\cite{wang2024optiql} (SIGMOD 2024) re-examines optimistic locking for memory-optimised indexes; \emph{Motor}~\cite{wei2024motor} (OSDI 2024) introduces multi-versioning for distributed transactions on disaggregated memory; and Zhou et al.~\cite{zhou2025ccaas} (VLDB 2025) propose Concurrency-Control-as-a-Service, decoupling the CC layer from the storage engine.
 
-\section{Atomic Operations and Lua Scripting}
+\section[Atomic Operations]{Atomic Operations and Lua Scripting}
 On the Redis side, atomic decrement via Lua scripts has emerged as the de facto idiom for inventory-style operations. Recent industry write-ups~\cite{oneuptime2026lua, oneuptime2026inventory, dev2025redislua} document the pattern of bundling \texttt{GET}, conditional check, and \texttt{DECR} into a single Lua script to obtain serialised execution and prevent the classic read-modify-write race.
 
-\section{Eventually-Consistent Counters and CRDTs}
+\section[CRDT Counters]{Eventually-Consistent Counters and CRDTs}
 Conflict-free replicated data types (CRDTs) provide a mathematically-grounded alternative to coordination for counters. Duncan~\cite{duncan2025crdt} provides a 2025 field-guide to CRDT primitives including PN-Counters; Shapiro et al.'s seminal work~\cite{shapiro2011crdt} remains the canonical reference, while recent applications to inventory and reservation systems are surveyed in~\cite{ably2024crdt, ijsoc2025inventory}.
 
-\section{Single-Flight and Cache Stampede Mitigation}
+\section[Single-Flight \& Stampede]{Single-Flight and Cache Stampede Mitigation}
 Single-flight (also called request coalescing or de-duplication) is the most direct mitigation for cache stampedes. Vattani et al.'s XFetch paper remains the canonical academic reference for probabilistic early-refresh; recent practitioner write-ups~\cite{1xapi2026singleflight, oneuptime2026stampede, oneuptime2026coalescing} document the pattern in modern Go, Node, and Redis ecosystems. We contribute by integrating single-flight with our thread-level and server-local caches as a first-class primitive in the contention layer.
 
 % =============================================================================
@@ -328,7 +328,7 @@ The target system is a stateless, horizontally-scaled API tier written in Haskel
 \section{Request Lifecycle}
 A single payment request executes the following stages: (1) authentication and merchant lookup, (2) configuration and routing fetch, (3) risk evaluation, (4) gateway selection, (5) gateway dispatch, and (6) ledger write. Stages (1)--(4) are dominated by configuration-class lookups; stages (5)--(6) involve external calls and authoritative writes. Our caching work targets stages (1)--(4); our contention layer targets stages (5)--(6) and any inventory-style logic embedded within them.
 
-\section{Baseline Performance Characteristics}
+\section[Baseline Performance]{Baseline Performance Characteristics}
 Table~\ref{tab:baseline} reports the baseline performance of a representative node under peak load.
 
 \begin{table}[h]
@@ -361,7 +361,7 @@ Configuration data is globally scoped and slowly mutating; routing tables change
 \vspace{-1cm}
 \noindent \rule{6.6in}{0.01in}
 
-\section{Tier 1: Thread-Level Cache (Request-Scoped)}
+\section[Tier 1: Thread-Level Cache]{Tier 1: Thread-Level Cache (Request-Scoped)}
 The thread-level cache is a per-request \texttt{IORef HashMap} that memoises lookups for the lifetime of a single request. It is created at request entry, populated on the first lookup of each key, consulted on subsequent lookups, and discarded at request completion.
 
 \subsection{Correctness Guarantee}
@@ -370,7 +370,7 @@ Because the cache is destroyed at request termination and is not shared between 
 \subsection{Expected and Realised Impact}
 Empirically the thread-level cache achieves a 22.3\% hit rate on eligible lookups, eliminating roughly 2--4 redundant network calls per request.
 
-\section{Tier 2: Server-Local Cache (Node-Scoped)}
+\section[Tier 2: Server-Local Cache]{Tier 2: Server-Local Cache (Node-Scoped)}
 The server-local cache is a node-scoped, concurrent cache implemented as a \texttt{TVar} containing a bounded LRU map with TTL-based expiry. It is shared across all request-handling threads on a node.
 
 \subsection{TTL Selection Rationale}
@@ -537,7 +537,7 @@ PN-Counters are appropriate when an \emph{over-allocation tolerance} exists at t
 \subsection{Trade-offs}
 CRDTs eliminate coordination latency entirely (writes are local, never blocked) and survive partitions trivially. The cost is the loss of a hard upper bound: under sufficiently bursty contention they can over-decrement~\cite{ably2024crdt, ijsoc2025inventory}. We classify CRDTs as a \emph{relaxed} contention primitive and gate their use behind explicit business-class flags.
 
-\section{Technique 5: Single-Flight Request Coalescing}
+\section[Technique 5: Single-Flight]{Technique 5: Single-Flight Request Coalescing}
 \label{sec:singleflight}
 
 \subsection{Mechanism}
@@ -699,7 +699,7 @@ threadInsert :: ThreadCache -> CacheKey -> CacheVal -> IO ()
 threadInsert (ThreadCache ref) k v = modifyIORef' ref (HM.insert k v)
 \end{lstlisting}
 
-\section{Server-Local Cache (TVar + LRU + TTL)}
+\section[Server-Local Cache]{Server-Local Cache (TVar + LRU + TTL)}
 \begin{lstlisting}[language=Haskell, caption=Server-local cache (node-scoped)]
 data ServerCache = ServerCache
   { scStore   :: TVar (HashMap CacheKey (POSIXTime, CacheVal))
@@ -719,7 +719,7 @@ serverLookup (ServerCache st _) k = do
       Nothing -> pure Nothing
 \end{lstlisting}
 
-\section{Integrated Read Path with Single-Flight}
+\section[Integrated Read Path]{Integrated Read Path with Single-Flight}
 \begin{lstlisting}[language=Haskell, caption=Two-tier read path with single-flight coalescing]
 fetch :: Ctx -> CacheKey -> IO CacheVal
 fetch ctx k = do
@@ -895,7 +895,7 @@ Per node, the combined caching + contention layer adds: 14--19\,MB for the serve
 \vspace{-1cm}
 \noindent \rule{6.6in}{0.01in}
 
-\section{Why 4\% Network Reduction Matters at Scale}
+\section[Why 4\% Matters at Scale]{Why 4\% Network Reduction Matters at Scale}
 At 68{,}000 cross-node operations per second, a 4.1\% reduction is $\sim$2{,}800 operations per second eliminated --- equivalent to roughly one Redis shard's worth of capacity, freeing it for growth without provisioning new infrastructure. The latency improvements compound: lower Redis load reduces Redis tail latency, which feeds back as further API latency reduction (the ``virtuous cycle'' visible in the 26.2\% Redis p99 drop).
 
 \section{Trade-offs}
