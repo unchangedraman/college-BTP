@@ -1,35 +1,78 @@
 % =============================================================================
-%  B.Tech Project (End-Term) -- single-file research paper
-%  All content inlined here. Logo file at FrontPages/ABV_IIITM_Logo.jpeg.
-%  Class/style files: pkmthesis.cls, extra_functions.sty,
-%                     pagesetup_pkm_middleside.tex, references.bib
+%  B.Tech Project (End-Term) -- Research Paper
+%  Title: Reducing Cross-Node Network Calls in Distributed Payment Systems
+%         via Thread-Level and Server-Local Caching
+%  Author: Raman Kapoor, ABV-IIITM Gwalior
+%
+%  SINGLE-FILE STANDALONE VERSION.
+%  Uses only standard LaTeX classes + standard packages shipped with TeX Live
+%  / Overleaf. No custom .cls / .sty / .bib needed. To show the college logo,
+%  upload the file ABV_IIITM_Logo.jpeg next to this .tex (Overleaf: just drop
+%  it into the same folder); if absent, the title page still compiles.
 % =============================================================================
-\documentclass[12pt,phd,times]{pkmthesis}
-\usepackage{amsmath,epsfig,graphicx,setspace,url,float}
-\usepackage{pstricks,colortab,pifont}
-\usepackage{lscape,multicol,multirow,longtable,subfigure}
-\usepackage{cite,bm}
-\usepackage[english]{babel}
-\usepackage[small,bf]{caption}
-\usepackage{csquotes}
-\usepackage{threeparttable}
+\documentclass[12pt,a4paper,oneside]{report}
+
+% ---------- Encoding & Fonts ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{mathptmx}                  % Times-like serif body
+
+% ---------- Layout ----------
+\usepackage[margin=1in,top=1in,bottom=1in,left=1.25in,right=1in]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{setspace}
+\onehalfspacing
+
+% ---------- Content ----------
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{makecell}
+\usepackage{multirow}
+\usepackage{multicol}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{url}
+
+% ---------- Code & Math ----------
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
 \usepackage{tikz}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, patterns}
-\usepackage{makecell}
-\usepackage{booktabs}
-\usepackage{enumitem}
-\usepackage{listings}
 \usepackage{xcolor}
-\setlength{\textfloatsep}{1cm}
-\normalem
-\setlength{\abovecaptionskip}{8pt}
-\setlength{\belowcaptionskip}{8pt}
-\usepackage{hyperref}
-\usepackage{extra_functions}
-\input{pagesetup_pkm_middleside.tex}
-\raggedbottom
+\usepackage{float}
+
+% ---------- Hyperref (load last) ----------
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=blue!60!black,
+    urlcolor=blue!60!black,
+    pdftitle={Reducing Cross-Node Network Calls in Distributed Payment Systems},
+    pdfauthor={Raman Kapoor}
+}
+
+% ---------- Header / Footer ----------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\bfseries\small\leftmark}
+\fancyhead[R]{\bfseries\small\rightmark}
+\fancyfoot[C]{\bfseries\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---------- Chapter heading style (mimics IIITM template's rule-under-title) ----------
+\titleformat{\chapter}[display]
+  {\normalfont\Large\bfseries}
+  {\chaptertitlename\ \thechapter}{12pt}{\Large}
+  [\vspace{0.2cm}\noindent\rule{\textwidth}{0.4pt}]
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
 
 % ---------- Listings styling ----------
 \definecolor{codegreen}{rgb}{0,0.5,0}
@@ -59,42 +102,47 @@
 
 % =============================================================================
 \begin{document}
-\setcounter{page}{1} \pagenumbering{roman}
-\doublespacing
+
+\setcounter{page}{1}
+\pagenumbering{roman}
 
 % ============================== TITLE PAGE ===================================
+\begin{titlepage}
 \thispagestyle{empty}
-\pdfbookmark{Title}{Title}
-
 \begin{center}
 \fontsize{15.8pt}{19pt}\selectfont
 {\textbf{Reducing Cross-Node Network Calls in Distributed Payment Systems via Thread-Level and Server-Local Caching\\}}
 \vspace*{0.15in}
+
 \emph{\large{A report submitted for end-term evaluation of the project for the award of}} \\
-\emph{\large{Bachelor of Technology \\}}
-\large{in \\}
-\large{Information Technology\\}
+\emph{\large{Bachelor of Technology}} \\
+\large{in} \\
+\large{Information Technology}\\[0.3cm]
 \large{By}\\
-\large{\textbf{Raman Kapoor : 2022BIT-XXX}} \\
+\large{\textbf{Raman Kapoor : 2022BIT-XXX}} \\[0.4cm]
 \large{Under the Supervision of} \\
-\large{\textbf{Dr.\ Vivek Kumar Singh}} \\
-
+\large{\textbf{Dr.\ Vivek Kumar Singh}}
 \end{center}
-\begin{figure}[!h]
-\centerline{\includegraphics*[width = 3cm]{FrontPages/ABV_IIITM_Logo.jpeg}}
-\end{figure}
-\centerline{\large{ABV-INDIAN INSTITUTE OF INFORMATION TECHNOLOGY }}
-\centerline{\large{AND MANAGEMENT GWALIOR}} \vspace*{0.05in}
-\centerline{\large{GWALIOR, INDIA}} \vspace*{0.05in}
-\centerline{\large{2026}}
 
-\thispagestyle{empty}
-\clearpage
+\vspace{0.6cm}
+\begin{center}
+\IfFileExists{ABV_IIITM_Logo.jpeg}{%
+    \includegraphics[width=3cm]{ABV_IIITM_Logo.jpeg}%
+}{%
+    \fbox{\parbox[c][3cm][c]{3cm}{\centering\small[ABV-IIITM\\logo]}}%
+}
+\end{center}
+
+\begin{center}
+{\large{ABV-INDIAN INSTITUTE OF INFORMATION TECHNOLOGY}}\\[0.05cm]
+{\large{AND MANAGEMENT GWALIOR}}\\[0.1cm]
+{\large{GWALIOR, INDIA}}\\[0.1cm]
+{\large{2026}}
+\end{center}
+\end{titlepage}
 
 % ============================== DECLARATION ==================================
 \thispagestyle{empty}
-\pdfbookmark{Declaration}{Declaration}
-
 \begin{center}
 {\Large \bf DECLARATION}
 \end{center}
@@ -102,28 +150,25 @@
 \noindent I hereby certify that the work, which is being presented in the report/thesis, entitled REDUCING CROSS-NODE NETWORK CALLS IN DISTRIBUTED PAYMENT SYSTEMS VIA THREAD-LEVEL AND SERVER-LOCAL CACHING, in fulfillment of the requirement for end-term evaluation of the project for the award of the degree of Bachelor of Technology in Information Technology and submitted to the institution is an authentic record of my own work carried out under the supervision of Dr.\ Vivek Kumar Singh. I also cited the reference about the text(s)/figure(s)/table(s) from where they have been taken.
 
 \vspace{1cm}
-
 \begin{center}
 \begin{tabular}{p{0.58\textwidth}p{0.4\textwidth}}
 Dated:  & {\bf{Signature of the candidate}} \\
 \end{tabular}
 \end{center}
+
 \vspace{1.5cm}
 \noindent This is to certify that the above statement made by the candidate is correct to the best of my knowledge.
 
 \vspace{1.5cm}
-
 \begin{center}
 \begin{tabular}{p{0.65\textwidth}p{0.4\textwidth}}
 Dated: & {\bf{Signature of supervisor}} \\
 \end{tabular}
 \end{center}
-
 \clearpage
+
 % ============================ ACKNOWLEDGEMENT ================================
 \thispagestyle{empty}
-\pdfbookmark{Acknowledgement}{Acknowledgement}
-
 \begin{center}
 {\LARGE \bf Acknowledgements}
 \end{center}
@@ -137,61 +182,29 @@ Finally, I would like to thank my family and friends for their patience and enco
 \begin{flushright}
 \textit{\textbf{Raman Kapoor}}
 \end{flushright}
-
-\thispagestyle{empty}
 \clearpage
 
 % ============================== ABSTRACT =====================================
 \thispagestyle{empty}
-{\renewcommand{\baselinestretch}{1.5}
 \begin{center}
-{\bf{Abstract}}
+{\Large\bf Abstract}
 \end{center}
 \noindent Distributed payment systems serving millions of daily transactions face two intertwined challenges: redundant cross-node network calls that inflate p95/p99 tail latency, and concurrent contention on single, indivisible resources (e.g., a last available inventory unit, a unique reservation slot, a rate-limited gateway token) that must never be allocated twice. Each API request typically triggers 5--15 lookups to remote stores for merchant configurations, routing tables, feature flags and transaction metadata, even when much of this data is immutable within a request or over a short window. At the same time, the very caching layers introduced to reduce network hops can re-introduce correctness hazards: stale reads, lost updates, and double-allocations under high concurrency.
 
 This report proposes an integrated two-layer architecture. The \textbf{caching layer} consists of (1)~a thread-level cache that eliminates redundant data fetches within a single request's execution context and (2)~a server-local cache that absorbs cross-request lookups for immutable, configuration-class data. The \textbf{contention layer} layers five complementary safety mechanisms over the cache: distributed locking with fencing tokens, atomic decrement via Redis Lua scripts, optimistic concurrency control with versioned cache entries, CRDT-based PN-Counters for eventually-consistent reservations, and single-flight request coalescing. Formal cache-safety boundaries govern which data classes are eligible for caching, and a decision matrix selects the right contention primitive per data class. Evaluation on a production payments platform handling roughly 68{,}000 cross-node operations per second shows a 4.1\% reduction in cross-node network calls at peak, an 11.2\% reduction in p95 latency and a 13.0\% reduction in p99 latency, with zero double-allocation incidents after the contention layer was rolled out. The combined approach is lightweight, requires no new infrastructure beyond a Redis cluster already present for caching, and is portable across language runtimes.
-}
-
-\thispagestyle{empty}
 \clearpage
 
 % ============================== TOC + LoF + LoT ==============================
-\dominitoc
-\dominilof
-\dominilot
-\fancyhf{} \fancyhead[LE]{\bfseries\small{\leftmark}}
-\fancyhead[RO]{\bfseries\small{\rightmark}}
-\fancyfoot[CE,CO]{\bfseries\thepage}
-
-\renewcommand{\baselinestretch}{1}
-\pdfbookmark[0]{Index}{index}
-\pdfbookmark[1]{Contents}{toc}
-\fancyhead[LE]{\bfseries\small{Contents}}
-\fancyhead[RO]{\bfseries\small{Contents}}
 \tableofcontents
 \clearpage
-
-\pdfbookmark[1]{List of Figures}{lof}
-\addstarredchapter{List of Figures}
-\fancyhead[LE]{\bfseries\small{List of Figures}}
-\fancyhead[RO]{\bfseries\small{List of Figures}}
 \listoffigures
 \clearpage
-
-\pdfbookmark[1]{List of Tables}{lot}
-\addstarredchapter{List of Tables}
-\fancyhead[LE]{\bfseries\small{List of Tables}}
-\fancyhead[RO]{\bfseries\small{List of Tables}}
 \listoftables
 \clearpage
 
-% ============================== BODY =========================================
-\fancyhf{}
-\fancyhead[LE]{\bfseries\small{\leftmark}}
-\fancyhead[RO]{\bfseries\small{\rightmark}}
-\fancyfoot[CE,CO]{\bfseries\thepage}
-\setcounter{page}{1} \pagenumbering{arabic}
-\renewcommand{\labelenumi}{(\roman{enumi})}
+% ============================== BODY (arabic page numbering) =================
+\setcounter{page}{1}
+\pagenumbering{arabic}
 
 % ----------- CHAPTER 1 -----------
 \chapter{Introduction and Problem Statement}
@@ -922,13 +935,131 @@ In short: \emph{the same examiner question that surfaced at the minor evaluation
 % =============================================================================
 
 % ============================== BIBLIOGRAPHY =================================
-\fancyhead[RO]{\bfseries\small{Bibliography}}
-\pdfbookmark[1]{Bibliography}{bib}
-\addstarredchapter{Bibliography}
-\baselineskip 14pt
-\small
-\bibliographystyle{IEEEtran}
-\nocite{*}
-\bibliography{references}
+\begin{thebibliography}{99}
+
+\bibitem{kumar2024caching}
+Kumar, A., et al.,
+``Comparative Analysis of Distributed Caching Algorithms: Performance Metrics and Implementation Considerations,''
+arXiv:2504.02220, 2024.
+\url{https://arxiv.org/abs/2504.02220}
+
+\bibitem{qin2024tailcache}
+Qin, R., et al.,
+``Tail-Optimised Caching for High-Fan-Out Inference Workloads,''
+arXiv:2510.15152, 2024.
+
+\bibitem{tankoraphael2026architecture}
+Tankoraphael,
+``The Architecture of Distributed Caching and the Pursuit of Data Consistency in High-Scale Systems,''
+Medium, February 2026.
+
+\bibitem{wong2024dfuse}
+Wong, T., et al.,
+``DFUSE: Strongly Consistent Write-Back Kernel Caching for Distributed Userspace File Systems,''
+arXiv:2503.18191, 2024.
+
+\bibitem{anonymous2025distlock}
+``Distributed Locking: Performance Analysis and Optimisation Strategies,''
+arXiv:2504.03073, 2025.
+
+\bibitem{wang2024optiql}
+Wang, Z., et al.,
+``OptiQL: Robust Optimistic Locking for Memory-Optimised Indexes,''
+\textit{Proceedings of the ACM SIGMOD International Conference on Management of Data}, 2024.
+
+\bibitem{wei2024motor}
+Wei, X., et al.,
+``Motor: Enabling Multi-Versioning for Distributed Transactions on Disaggregated Memory,''
+\textit{Proceedings of the 18th USENIX Symposium on Operating Systems Design and Implementation (OSDI)}, 2024.
+
+\bibitem{zhou2025ccaas}
+Zhou, W., et al.,
+``Concurrency Control as a Service,''
+\textit{Proceedings of the VLDB Endowment}, vol.\ 18, p.\ 2761, 2025.
+
+\bibitem{oneuptime2026lua}
+OneUptime Engineering,
+``How to Implement Atomic Read-Modify-Write with Redis Lua,''
+2026. \url{https://oneuptime.com/blog/post/2026-01-21-redis-lua-read-modify-write/view}
+
+\bibitem{oneuptime2026inventory}
+OneUptime Engineering,
+``How to Implement Real-Time Inventory Management with Redis,''
+2026.
+
+\bibitem{oneuptime2026stampede}
+OneUptime Engineering,
+``How to Build Cache Stampede Prevention,''
+2026.
+
+\bibitem{oneuptime2026coalescing}
+OneUptime Engineering,
+``How to Implement Request Coalescing,''
+2026.
+
+\bibitem{1xapi2026singleflight}
+1xAPI Engineering,
+``Prevent Cache Stampede in Node.js: Single-Flight Pattern 2026,''
+2026.
+
+\bibitem{dev2025redislua}
+SilentWatcher,
+``Fixing Race Conditions in Redis Counters: Why Lua Scripting Is the Key to Atomicity and Reliability,''
+DEV Community, 2025.
+
+\bibitem{redis2024inventory}
+Redis Ltd.,
+``Reserve Inventory in Real Time with Redis Using WATCH, MULTI, and Audit Streams,''
+Redis Tutorials, 2024. \url{https://redis.io/tutorials/inventory-reservation-in-real-time-with-redis/}
+
+\bibitem{shapiro2011crdt}
+Shapiro, M., Pregui\c{c}a, N., Baquero, C., and Zawirski, M.,
+``Conflict-Free Replicated Data Types,''
+INRIA Technical Report, 2011.
+
+\bibitem{duncan2025crdt}
+Duncan, I.,
+``The CRDT Dictionary: A Field Guide to Conflict-Free Replicated Data Types,''
+2025.
+
+\bibitem{ably2024crdt}
+Ably Engineering,
+``CRDTs Solve Distributed Data Consistency Challenges,''
+2024.
+
+\bibitem{ijsoc2025inventory}
+``Inventory Synchronisation in Distributed E-Commerce Platforms,''
+\textit{International Journal of Science and Society}, vol.\ 9, no.\ 2, August 2025.
+
+\bibitem{kleppmann2016locking}
+Kleppmann, M.,
+``How to Do Distributed Locking,''
+\url{https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html}, 2016.
+
+\bibitem{amitavroy2026hotel}
+Roy, A.,
+``Race Conditions in Hotel Booking Systems,''
+2026.
+
+\bibitem{ghc2024}
+GHC Team,
+``The Glasgow Haskell Compiler User's Guide,''
+2024.
+
+\bibitem{redis2024}
+Redis Ltd.,
+``Redis Documentation,''
+2024.
+
+\bibitem{caffeine2024}
+Manes, B.,
+``Caffeine: A High Performance Caching Library for Java,''
+2024.
+
+\bibitem{ecommerce2025inventory}
+``The Impact of E-commerce Development on Inventory Management,''
+\textit{Transportation Research Procedia}, ScienceDirect, 2025.
+
+\end{thebibliography}
 
 \end{document}
