@@ -1,0 +1,23 @@
+\section{Context}
+Online payment platforms occupy a uniquely demanding position in the distributed-systems landscape: they must combine the throughput of large-scale web services, the latency budgets of interactive applications, and the correctness guarantees of financial ledgers. A single user-initiated transaction crosses several stateless API servers, a transactional database, and a number of supporting data stores --- typically a Redis cluster for hot configuration, a routing service for gateway selection, a risk-engine, and one or more downstream gateway integrations. Each component contributes to the end-to-end latency and to the overall correctness of the system.
+
+\section{The Latency Problem}
+Profiling on a production platform shows that a typical payment request triggers between five and fifteen \emph{cross-node network calls} during its lifecycle. Many of these calls are \emph{redundant}: they fetch the same merchant configuration, the same gateway routing table, or the same feature-flag value multiple times within the same request, or fetch effectively immutable data that has already been fetched by another concurrent request on the same node only milliseconds earlier. Each redundant call costs roughly 0.6--3.5\,ms of network round-trip time and contributes to load on the shared Redis cluster, amplifying tail latency at peak traffic \cite{kumar2024caching, qin2024tailcache}.
+
+\section{The Concurrency Problem}
+At the same time, certain operations involve \emph{single, indivisible resources}: the last unit of an inventory item, the only available time slot for a reservation, a unique gateway token issued under a per-second rate limit, or a single bank account being debited concurrently by two requests. Such operations cannot tolerate optimistic execution by both requests --- exactly one must succeed and the other must observe a definitive failure. During the minor evaluation of this work, an examiner posed the question: \emph{``If you cache state, how do you prevent two users from booking the same single piece?''} This paper takes that question as a central design constraint, rather than as an afterthought. Caching that satisfies safety boundaries (Section~\ref{sec:safety}) does not, by itself, resolve single-resource contention; a complementary contention layer is required.
+
+\section{Problem Statement}
+We address the following problem: \emph{In a distributed, stateless, high-throughput payment API, how can we (i) safely reduce the number of cross-node network calls per request via in-process caching, and (ii) guarantee that concurrent operations on single, indivisible resources cannot result in double-allocation, lost updates, or stale-cache-induced overselling --- all without introducing new infrastructure or sacrificing tail-latency improvements?}
+
+\section{Contributions}
+This paper makes the following contributions:
+\begin{enumerate}[leftmargin=*]
+    \item A formal \textbf{cache-safety boundary framework} (four criteria) that classifies data as cache-eligible or cache-ineligible by construction.
+    \item A \textbf{two-tier in-process caching architecture} (thread-level + server-local) that operates entirely within the API server, requires no additional infrastructure, and reduces cross-node calls by 4.1\% at peak.
+    \item A \textbf{contention layer} that integrates five complementary safety primitives --- distributed locking with fencing tokens, Redis Lua atomic decrement, OCC with versioned cache entries, PN-Counter CRDTs, and single-flight request coalescing --- and a decision matrix that selects the appropriate primitive per data class.
+    \item A \textbf{production evaluation} on a payment platform handling $\sim$68{,}000 cross-node operations per second, demonstrating 11.2\% / 13.0\% reductions in p95 / p99 latency and zero double-allocation incidents over a 30-day post-deployment window.
+    \item A \textbf{cross-runtime comparison} (Haskell, Java, Go, Rust, Node.js) showing how each tier and contention primitive maps onto idiomatic concurrency abstractions in each language.
+\end{enumerate}
+
+% =============================================================================

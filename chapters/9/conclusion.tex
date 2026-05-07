@@ -1,0 +1,15 @@
+\section{Conclusion}
+This paper presented an integrated architecture for distributed payment APIs that simultaneously reduces cross-node network calls and guarantees correctness on single-resource contention. The two-tier caching layer (thread-level + server-local) achieves a 4.1\% reduction in cross-node calls at peak and 11.2\% / 13.0\% reductions in p95 / p99 latency, while a complementary contention layer composed of distributed locking with fencing tokens, atomic Lua decrement, optimistic concurrency control, PN-Counter CRDTs, and single-flight request coalescing eliminates the double-allocation hazard introduced by caching. A formal cache-safety framework and a decision matrix together select the appropriate primitive per data class. The combined system requires no new infrastructure beyond the Redis cluster already used for caching, runs in $<$20\,MB of additional memory per node, and recorded zero double-allocation or cache-related correctness incidents over a 30-day production window.
+
+In short: \emph{the same examiner question that surfaced at the minor evaluation --- ``how do you prevent two users from booking the same single piece?'' --- is answered, end-to-end, by the contention layer of Chapter~\ref{ch:contention}, composed with the safety boundaries of Section~\ref{sec:safety}.}
+
+\section{Future Work}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Adaptive TTLs.} Replace fixed TTLs with workload-aware adaptive TTLs that shrink under detected mutation pressure.
+    \item \textbf{Learned contention prediction.} Use lightweight ML models to predict which keys are about to enter a high-contention regime and pre-warm the appropriate primitive (e.g., switch a key from cache-only to Lua-decrement before a flash sale begins).
+    \item \textbf{Verified fence tokens.} Apply formal verification (TLA+ or Coq) to the fencing-token discipline to mechanise the safety argument.
+    \item \textbf{Cross-DC extension.} Extend the contention layer across data centres, evaluating the trade-offs of geo-replicated Redis vs.\ leader-elected coordinators for cross-DC inventory.
+    \item \textbf{Graceful degradation.} Define formal degradation modes for the contention layer when Redis is partially unavailable (e.g., automatic fallback to PN-Counter for non-critical workloads).
+\end{itemize}
+
+% =============================================================================

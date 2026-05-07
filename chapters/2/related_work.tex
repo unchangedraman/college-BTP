@@ -1,0 +1,19 @@
+\section{Tail Latency and Distributed Caching}
+The classical formulation of tail-latency amplification in large fan-out systems is due to Dean and Barroso, but recent comparative work has refined our understanding of how caching policies interact with the tail. Kumar et al.~\cite{kumar2024caching} present a 2024 comparative analysis of distributed caching algorithms across throughput, hit rate, and tail latency, finding that eventual-consistency caches achieve 3--5$\times$ higher throughput than strongly-consistent variants in read-dominated workloads. Qin et al.~\cite{qin2024tailcache} explore tail-optimised caching for high-fan-out inference workloads, demonstrating that policies designed for hit rate alone can paradoxically worsen p99 latency.
+
+\section{In-Process and Multi-Tier Caches}
+The trade-off between in-process and distributed caches has been examined extensively, both in industrial practice (Twitter, Cloudflare, Netflix) and in recent academic work. Tankoraphael~\cite{tankoraphael2026architecture} surveys 2026-vintage industry practice on multi-tier cache hierarchies and consistency, while DFUSE~\cite{wong2024dfuse} demonstrates that strongly-consistent write-back caching is achievable in distributed userspace file systems with carefully bounded staleness windows.
+
+\section{Concurrency Control and Distributed Locking}
+Concurrency control for single-resource contention has seen renewed attention. The recent arXiv survey of distributed locking~\cite{anonymous2025distlock} reports up to 68\% throughput improvements for modern distributed lock protocols over centralised baselines under high contention. \emph{OptiQL}~\cite{wang2024optiql} (SIGMOD 2024) re-examines optimistic locking for memory-optimised indexes; \emph{Motor}~\cite{wei2024motor} (OSDI 2024) introduces multi-versioning for distributed transactions on disaggregated memory; and Zhou et al.~\cite{zhou2025ccaas} (VLDB 2025) propose Concurrency-Control-as-a-Service, decoupling the CC layer from the storage engine.
+
+\section{Atomic Operations and Lua Scripting}
+On the Redis side, atomic decrement via Lua scripts has emerged as the de facto idiom for inventory-style operations. Recent industry write-ups~\cite{oneuptime2026lua, oneuptime2026inventory, dev2025redislua} document the pattern of bundling \texttt{GET}, conditional check, and \texttt{DECR} into a single Lua script to obtain serialised execution and prevent the classic read-modify-write race.
+
+\section{Eventually-Consistent Counters and CRDTs}
+Conflict-free replicated data types (CRDTs) provide a mathematically-grounded alternative to coordination for counters. Duncan~\cite{duncan2025crdt} provides a 2025 field-guide to CRDT primitives including PN-Counters; Shapiro et al.'s seminal work~\cite{shapiro2011crdt} remains the canonical reference, while recent applications to inventory and reservation systems are surveyed in~\cite{ably2024crdt, ijsoc2025inventory}.
+
+\section{Single-Flight and Cache Stampede Mitigation}
+Single-flight (also called request coalescing or de-duplication) is the most direct mitigation for cache stampedes. Vattani et al.'s XFetch paper remains the canonical academic reference for probabilistic early-refresh; recent practitioner write-ups~\cite{1xapi2026singleflight, oneuptime2026stampede, oneuptime2026coalescing} document the pattern in modern Go, Node, and Redis ecosystems. We contribute by integrating single-flight with our thread-level and server-local caches as a first-class primitive in the contention layer.
+
+% =============================================================================

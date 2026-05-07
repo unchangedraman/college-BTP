@@ -1,0 +1,22 @@
+\section{Why 4\% Network Reduction Matters at Scale}
+At 68{,}000 cross-node operations per second, a 4.1\% reduction is $\sim$2{,}800 operations per second eliminated --- equivalent to roughly one Redis shard's worth of capacity, freeing it for growth without provisioning new infrastructure. The latency improvements compound: lower Redis load reduces Redis tail latency, which feeds back as further API latency reduction (the ``virtuous cycle'' visible in the 26.2\% Redis p99 drop).
+
+\section{Trade-offs}
+
+\subsection{Memory vs.\ Latency}
+The two-tier cache trades $<$20\,MB per node for tens of microseconds saved per cached lookup. At 3{,}000 RPS per node this saves cumulative seconds of CPU per minute.
+
+\subsection{Staleness vs.\ Freshness}
+TTL-based caching admits bounded staleness; the cache-safety boundary framework formalises which data classes can tolerate it. The contention layer ensures that single-resource state --- which cannot tolerate staleness --- is never served from a stale cache.
+
+\subsection{Strong vs.\ Eventual Consistency}
+We use strong consistency (Lua, lock, OCC) for inventory and balances, and eventual consistency (PN-Counter) only for soft holds and analytics counters. The decision matrix (Table~\ref{tab:matrix}) operationalises this choice.
+
+\section{Limitations}
+\begin{itemize}[leftmargin=*]
+    \item Distributed locks (Technique~1) remain vulnerable to misconfigured TTLs and clock drift; we mitigate with fence tokens but do not eliminate.
+    \item PN-Counter over-allocation, while bounded, is non-zero and must be acceptable to the business owner of the workload.
+    \item Pub/Sub-based invalidation has a tail latency window of tens of milliseconds during which the server-local cache may serve a freshly-stale display value. This is acceptable for display reads; authoritative reads bypass the cache.
+\end{itemize}
+
+% =============================================================================

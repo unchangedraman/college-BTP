@@ -23,3 +23,12 @@
 *.bcf
 *-blx.bib
 __latexindent_temp*
+
+# minitoc artifacts
+*.mlf*
+*.mlt*
+*.mtc*
+*.maf
+
+# inside chapters
+chapters/**/*.aux
