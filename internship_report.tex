@@ -1,47 +1,85 @@
-\documentclass[12pt,a4paper]{report}
+% =============================================================================
+%  Internship Report -- single-file standalone version
+%  Author: Raman Kapoor, ABV-IIITM Gwalior
+%  Logo: ABV_IIITM_Logo.jpeg next to this .tex (graceful fallback if absent)
+% =============================================================================
+\documentclass[12pt,a4paper,oneside]{report}
 
-% ─── Packages ───────────────────────────────────────────────────────────────
+% ---------- Encoding & fonts ----------
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
-\usepackage[margin=1in]{geometry}
-\usepackage{graphicx}
-\usepackage{hyperref}
-\usepackage{enumitem}
-\usepackage{booktabs}
-\usepackage{longtable}
-\usepackage{xcolor}
-\usepackage{listings}
-\usepackage{tikz}
-\usepackage{caption}
-\usepackage{subcaption}
-\usepackage{amsmath}
+\usepackage{mathptmx}
+
+% ---------- Layout ----------
+\usepackage[margin=1in,top=1in,bottom=1in,left=1.25in,right=1in]{geometry}
 \usepackage{fancyhdr}
 \usepackage{titlesec}
 \usepackage{setspace}
+\onehalfspacing
 
-\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+% ---------- Content ----------
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{makecell}
+\usepackage{multirow}
+\usepackage{multicol}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{url}
 
-% ─── Styling ────────────────────────────────────────────────────────────────
+% ---------- Code & math ----------
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, patterns}
+\usepackage{xcolor}
+\usepackage{float}
+
+% ---------- Hyperref last ----------
+\usepackage[hidelinks]{hyperref}
 \hypersetup{
     colorlinks=true,
-    linkcolor=blue!70!black,
-    citecolor=blue!70!black,
-    urlcolor=blue!70!black
+    linkcolor=black,
+    citecolor=blue!60!black,
+    urlcolor=blue!60!black,
+    pdftitle={Internship Report -- Raman Kapoor},
+    pdfauthor={Raman Kapoor}
 }
 
-\definecolor{codegreen}{rgb}{0,0.6,0}
+% ---------- Headers ----------
+\renewcommand{\chaptermark}[1]{\markboth{\chaptername\ \thechapter.\ #1}{}}
+\renewcommand{\sectionmark}[1]{\markright{\thesection.\ #1}}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\nouppercase{\scriptsize\bfseries\leftmark}}
+\fancyhead[R]{\nouppercase{\scriptsize\bfseries\rightmark}}
+\fancyfoot[C]{\bfseries\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\setlength{\headheight}{15pt}
+
+% ---------- Chapter heading ----------
+\titleformat{\chapter}[display]
+  {\normalfont\Large\bfseries}
+  {\chaptertitlename\ \thechapter}{12pt}{\Large}
+  [\vspace{0.2cm}\noindent\rule{\textwidth}{0.4pt}]
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+
+% ---------- Listings ----------
+\definecolor{codegreen}{rgb}{0,0.5,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
 \definecolor{codepurple}{rgb}{0.58,0,0.82}
-\definecolor{backcolour}{rgb}{0.97,0.97,0.97}
-
-\lstdefinestyle{codestyle}{
+\definecolor{backcolour}{rgb}{0.96,0.96,0.96}
+\lstdefinestyle{nice}{
     backgroundcolor=\color{backcolour},
     commentstyle=\color{codegreen},
-    keywordstyle=\color{blue!80!black},
+    keywordstyle=\color{blue}\bfseries,
     numberstyle=\tiny\color{codegray},
     stringstyle=\color{codepurple},
-    basicstyle=\ttfamily\small,
+    basicstyle=\ttfamily\footnotesize,
     breakatwhitespace=false,
     breaklines=true,
     captionpos=b,
@@ -52,76 +90,149 @@
     showstringspaces=false,
     showtabs=false,
     tabsize=2,
-    frame=single,
-    rulecolor=\color{gray!30}
+    frame=single
 }
-\lstset{style=codestyle}
+\lstset{style=nice}
 
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{\small\leftmark}
-\fancyhead[R]{\small Internship Report}
-\fancyfoot[C]{\thepage}
-
-\onehalfspacing
-
-% ═══════════════════════════════════════════════════════════════════════════
+% =============================================================================
 \begin{document}
+\setcounter{page}{1}
+\pagenumbering{roman}
 
-% ─── Custom Title Page ──────────────────────────────────────────────────────
+% ============================== TITLE PAGE ===================================
 \begin{titlepage}
-\centering
+\thispagestyle{empty}
+\begin{center}
+\fontsize{15.8pt}{19pt}\selectfont
+{\textbf{Internship Report:\\Distributed Infrastructure and Backend Engineering\\at Juspay and Namma Yatri\\}}
+\vspace*{0.15in}
+\emph{\large{A report submitted for end-term evaluation of the internship for the award of}} \\
+\emph{\large{Bachelor of Technology}} \\
+\large{in} \\
+\large{Information Technology}\\[0.3cm]
+\large{By}\\
+\large{\textbf{Raman Kapoor : 2022BIT-XXX}} \\[0.4cm]
+\large{Under the Mentorship of} \\
+\large{\textbf{Pranshu Anand}} \\
+\large{(Industry Mentor, Juspay)}\\[0.3cm]
+\large{Faculty Advisor:\,\textbf{Dr.\ Vivek Kumar Singh}}
+\end{center}
 
-\vspace*{1cm}
-{\Large\bfseries ABV -- Indian Institute of Information Technology\\
-and Management, Gwalior}\\[1.5cm]
+\vspace{0.6cm}
+\begin{center}
+\IfFileExists{ABV_IIITM_Logo.jpeg}{%
+    \includegraphics[width=3cm]{ABV_IIITM_Logo.jpeg}%
+}{%
+    \fbox{\parbox[c][3cm][c]{3cm}{\centering\small[ABV-IIITM\\logo]}}%
+}
+\end{center}
 
-{\LARGE\bfseries SDE Internship Report}\\[0.8cm]
-
-{\Large Software Developer Intern\\
-at MindTickle}\\[1cm]
-
-{\large Enterprise Cloud Infrastructure, Cryptographic Key Management,\\
-and Distributed Payment Systems}\\[2cm]
-
-\hrule
-\vspace{1cm}
-
-\begin{minipage}[t]{0.45\textwidth}
-\raggedright
-\textbf{Submitted by:}\\[0.3cm]
-Raman Kapoor\\
-% Enrollment No.: XXXX-XXX
-\end{minipage}
-\hfill
-\begin{minipage}[t]{0.45\textwidth}
-\raggedleft
-\textbf{Industry Mentor:}\\[0.3cm]
-Pranshu Anand\\[0.8cm]
-\textbf{Faculty Advisor:}\\[0.3cm]
-Dr.\ Rahul Kala
-\end{minipage}
-
-\vfill
-{\large ABV-IIITM Gwalior}
-
+\begin{center}
+{\large{ABV-INDIAN INSTITUTE OF INFORMATION TECHNOLOGY}}\\[0.05cm]
+{\large{AND MANAGEMENT GWALIOR}}\\[0.1cm]
+{\large{GWALIOR, INDIA}}\\[0.1cm]
+{\large{2026}}
+\end{center}
 \end{titlepage}
-\newpage
 
-% ─── Abstract ───────────────────────────────────────────────────────────────
-\begin{abstract}
-This report presents a comprehensive account of the work undertaken during my internship, encompassing three distinct but complementary domains of modern cloud-native engineering. The first project addresses the challenge of delivering high-performance block storage at scale by evaluating and deploying \textbf{Lightbits}—an NVMe-over-TCP storage solution—as a replacement for traditional Ceph clusters, demonstrating a 10$\times$ reduction in hardware footprint with superior IOPS throughput. The second project focuses on integrating \textbf{Barbican}, the OpenStack Key Management Service, with a Hardware Security Module (HSM) to establish a cryptographically secure, multi-tenant secret management pipeline capable of per-tenant key isolation and compliance with enterprise-grade security standards. The third project details the design and implementation of a \textbf{distributed, event-driven payout scheduling system} for a ride-hailing platform, serving over 10,000 rides daily, reducing driver payout latency from weekly cycles to T+2 hours, and integrating Paytm EDC payments with reconciliation and refund handling. Together, these projects span storage infrastructure, security architecture, and distributed systems—providing a holistic exposure to production-grade engineering challenges.
-\end{abstract}
+% ============================== DECLARATION ==================================
+\thispagestyle{empty}
+\begin{center}
+{\Large \bf DECLARATION}
+\end{center}
+\vspace{0.5cm}
+\noindent I hereby certify that the work, which is being presented in the report entitled INTERNSHIP REPORT: DISTRIBUTED INFRASTRUCTURE AND BACKEND ENGINEERING AT JUSPAY AND NAMMA YATRI, in fulfillment of the requirement for end-term evaluation of the internship for the award of the degree of Bachelor of Technology in Information Technology and submitted to the institution is an authentic record of my own work carried out under the mentorship of Mr.\ Pranshu Anand (Juspay) and the academic guidance of Dr.\ Vivek Kumar Singh. I also cited the references about the text(s)/figure(s)/table(s) from where they have been taken.
 
+\vspace{1cm}
+\begin{center}
+\begin{tabular}{p{0.58\textwidth}p{0.4\textwidth}}
+Dated:  & {\bf{Signature of the candidate}} \\
+\end{tabular}
+\end{center}
+
+\vspace{1.5cm}
+\noindent This is to certify that the above statement made by the candidate is correct to the best of my knowledge.
+
+\vspace{1.5cm}
+\begin{center}
+\begin{tabular}{p{0.65\textwidth}p{0.4\textwidth}}
+Dated: & {\bf{Signature of faculty advisor}} \\
+\end{tabular}
+\end{center}
+\clearpage
+
+% ============================ ACKNOWLEDGEMENT ================================
+\thispagestyle{empty}
+\begin{center}
+{\LARGE \bf Acknowledgements}
+\end{center}
+\noindent
+I would like to express my sincere gratitude to my industry mentor at \emph{Juspay}, Mr.\ Pranshu Anand, for the technical depth and the scope of ownership he extended to me during this internship. The work spanned distributed block storage, in-process caching for payment APIs, and a Shamir-secret-sharing-based secrets infrastructure --- each a substantial engineering challenge in its own right --- and his trust in letting me drive these projects end-to-end was the single biggest source of my growth this year.
+
+I am equally grateful to the maintainers and contributors of \emph{Namma Yatri}, the open-source ride-hailing platform on which I designed and shipped the distributed event-driven payout scheduler. The depth of the public review process, the rigour of the production constraints, and the willingness of the community to engage seriously with intern-led contributions were genuinely unusual and shaped how I now think about correctness in distributed systems.
+
+I would also like to acknowledge my faculty advisor at ABV-IIITM Gwalior, Dr.\ Vivek Kumar Singh, for his continual support and supervision over the course of this internship and the parallel B.Tech project, and for the freedom he gave me to pursue ideas that crossed the boundary between industry practice and academic enquiry.
+
+Finally, I thank my family and friends for their unwavering encouragement, and the faculty and staff of ABV-IIITM Gwalior for the academic environment that made this work possible.
+
+\begin{flushright}
+\textit{\textbf{Raman Kapoor}}
+\end{flushright}
+\clearpage
+
+% ============================== ABSTRACT =====================================
+\thispagestyle{empty}
+\begin{center}
+{\Large\bf Abstract}
+\end{center}
+\noindent This report presents the work undertaken across two production engineering engagements and one self-directed cloud-infrastructure project during the internship year. The first engagement, as a \textbf{Software Developer Intern at Juspay}, comprised three projects on the production payments platform: (i) replacing CEPH-based block storage with \textbf{Lightbits NVMe/TCP}, achieving 4$\times$ storage efficiency by delivering 48{,}000 TPS over 4 nodes versus 37{,}000 TPS over 40 nodes while enabling active-active high-availability for Barbican via a shared backend; (ii) implementing a \textbf{thread-level and server-local caching} layer for high-traffic payment APIs that reduced cross-node network calls by over 4\,\% at peak and cut p95 latency by 11.2\,\%, while preserving correctness through formal cache-safety boundaries; and (iii) designing a \textbf{distributed secrets infrastructure} based on Shamir secret sharing, memory-only keys, and Raft-based replication, replacing heavy AWS KMS usage. The second engagement, as a \textbf{Backend Engineer (Open Source) at Namma Yatri}, delivered a distributed event-driven payout scheduling system that reduced driver payout latency from weekly cycles to T+2 hours under real production traffic of 10{,}000+ rides per day, backed by a Redis-based delayed job scheduler with per-ride locking and idempotent state management. The third workstream, a self-directed project on \textbf{PostgreSQL on Kubernetes/OpenStack}, architected a five-layer nested virtualisation stack on a single i9-14900 host, automated HA cluster provisioning end-to-end with Cluster API and CloudNativePG, and shipped a Zero-Trust secret-delivery framework using a Go-based OpenBao broker and a custom Python SDK. Together, these projects span block storage, in-process caching, distributed secrets, event-driven scheduling, and cloud automation --- providing comprehensive exposure to production-grade distributed-systems engineering.
+\clearpage
+
+% ============================== TOC + LoF + LoT ==============================
 \tableofcontents
+\clearpage
 \listoffigures
+\clearpage
 \listoftables
-\newpage
+\clearpage
 
-% ═══════════════════════════════════════════════════════════════════════════
-%                  CHAPTER 1 — LIGHTBITS vs CEPH
-% ═══════════════════════════════════════════════════════════════════════════
-\chapter{High-Performance Block Storage: Lightbits as a Ceph Alternative}
+% ============================== BODY (arabic) ================================
+\setcounter{page}{1}
+\pagenumbering{arabic}
+
+% ----------------------------- CHAPTER 1: INTRODUCTION ----------------------
+\chapter[Introduction]{Introduction and Overview}
+\label{chap:intro}
+
+\section{Internship Overview}
+
+This internship spanned two distinct industry engagements and one self-directed cloud-infrastructure project, each contributing to a different stratum of the modern distributed-systems stack.
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Juspay} (Software Developer Intern, January 2026 -- Present): production payments platform handling tens of thousands of transactions per second across the Indian fintech ecosystem. Three projects were delivered here, all on production traffic: a block-storage migration from CEPH to Lightbits NVMe/TCP, a two-tier in-process caching layer for high-traffic APIs, and a Shamir-secret-sharing-based replacement for AWS KMS.
+    \item \textbf{Namma Yatri} (Backend Engineer, Open Source, November 2025 -- January 2026): the open-source ride-hailing platform serving Indian cities, written in Haskell with PostgreSQL and Redis. Contributed a distributed, event-driven payout scheduling system for special zones, serving 10{,}000+ rides daily.
+    \item \textbf{Self-directed} (Personal Infrastructure, March 2026): a five-layer nested virtualisation stack on a single workstation that exercises OpenStack, Kubernetes, CloudNativePG, and OpenBao end-to-end, automating HA Postgres provisioning and Zero-Trust secret delivery.
+\end{itemize}
+
+\section{Themes}
+
+Three recurring themes connect these otherwise unrelated projects:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Correctness under concurrency.} Whether the system in question is a payment API, a ride payout scheduler, or a multi-tenant secret store, the correctness boundary is the same: never duplicate a chargeable event, never lose a write, never serve stale data when authoritative state is required. This report repeatedly returns to the techniques that enforce that boundary --- atomic operations, leases with fence tokens, idempotency keys, and formal cache-safety criteria.
+    \item \textbf{Doing more with fewer machines.} The Lightbits migration, the two-tier cache, and the OpenBao secret broker each ask the same question: \emph{can we deliver the same or higher service level on a fraction of the infrastructure?} The answers, respectively, are 10$\times$ fewer storage nodes, 4\,\% fewer cross-node calls at peak, and a measurable reduction in AWS KMS cost.
+    \item \textbf{Open source as a delivery substrate.} Three of the five projects landed in publicly visible repositories --- the Namma Yatri PR, the Lightbits Cinder driver integration, and the OpenBao broker --- and the discipline of public review has been a recurring shaping force.
+\end{enumerate}
+
+\section{Report Structure}
+
+The remainder of this report is organised by project. Chapter~\ref{chap:lightbits} covers the Lightbits block storage migration. Chapter~\ref{chap:caching} describes the thread-level and server-local caching layer (the academic depth of which is the subject of the parallel B.Tech project report). Chapter~\ref{chap:openbao} details the Shamir-secret-sharing-based secrets infrastructure. Chapter~\ref{chap:barbican} covers the supporting Barbican KMS + HSM integration that preceded and motivated the OpenBao work. Chapter~\ref{chap:payout} presents the Namma Yatri payout scheduler. Chapter~\ref{chap:postgres-k8s} describes the self-directed PostgreSQL on Kubernetes/OpenStack project. Chapter~\ref{chap:conclusion} concludes.
+
+
+% ----------------------------- CHAPTER: LIGHTBITS ---------------------------
+\chapter[Block Storage with Lightbits]{High-Performance Block Storage: Lightbits as a CEPH Alternative}
+\label{chap:lightbits}
+
 
 % ─────────────────────────────────────────────────────────────────────────
 \section{Introduction and Problem Statement}
@@ -278,9 +389,131 @@ This project demonstrated that Lightbits provides a transformative alternative t
 
 
 % ═══════════════════════════════════════════════════════════════════════════
-%         CHAPTER 2 — BARBICAN + HSM INTEGRATION
-% ═══════════════════════════════════════════════════════════════════════════
-\chapter{Barbican Key Management Service with HSM Integration}
+
+% ----------------------------- CHAPTER: CACHING (brief) ---------------------
+\chapter[Distributed Caching for High-Traffic APIs]{Thread-Level and Server-Local Caching for High-Traffic Payment APIs}
+\label{chap:caching}
+
+\section{Context}
+
+The payment APIs operated by Juspay process millions of transactions per day across a horizontally scaled fleet of stateless application nodes. Profiling on the production cluster showed that each request issues between 5 and 15 \emph{cross-node network calls} during its lifecycle --- typically to a Redis cluster for merchant configuration, gateway routing tables, feature flags and short-lived transactional state. A non-trivial fraction of these calls are \emph{redundant}: identical lookups occur within the same request, or within milliseconds across concurrent requests on the same node, fetching effectively immutable data. The cumulative network round-trip time amplifies p95 and p99 tail latency, which is the metric customers actually feel.
+
+The challenge in payment systems is that aggressive caching must not weaken correctness. Stale reads in this domain are not merely a UX issue --- they can cause double-charges, lost merchant configuration updates, or compliance violations. The project therefore designed a caching layer governed by formal \emph{cache-safety boundaries}, so that only data classes that provably satisfy strict immutability and idempotency criteria are eligible for caching.
+
+\section{Two-Tier In-Process Architecture}
+
+The caching layer is entirely in-process; no new infrastructure is introduced. Two tiers are layered:
+
+\begin{description}[leftmargin=*]
+    \item[Tier 1 --- Thread-Level Cache.] A per-request \texttt{IORef HashMap} that memoises lookups for the lifetime of a single request and is destroyed at request termination. Because the cache is not shared between threads, it cannot serve stale data --- any value it returns is one that the same request has already observed. This tier alone achieved a 22.3\,\% hit rate on eligible lookups.
+    \item[Tier 2 --- Server-Local Cache.] A node-scoped, concurrent cache implemented as a \texttt{TVar} containing a bounded LRU map with TTL-based expiry. TTLs are tuned per data class (30\,s for routing tables, 60\,s for feature flags, 120\,s for merchant configuration). This tier is shared across all request-handling threads on a node and achieved a 41.7\,\% hit rate on cross-request lookups.
+\end{description}
+
+\section{Cache-Safety Boundaries}
+
+To prevent the deployment of caching on data that should not be cached, four formal criteria were defined. A data class is cache-eligible \emph{if and only if} all four hold:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Immutability within TTL} --- the data must not change over the cache TTL window with probability greater than an agreed bound.
+    \item \textbf{Request-scope independence} --- the value depends only on global or slow-changing state, not per-request parameters.
+    \item \textbf{Semantic idempotency of stale reads} --- even a stale value, if served, does not produce a financial discrepancy.
+    \item \textbf{Deterministic cache key} --- the key is derivable deterministically from the request, with no collision risk.
+\end{enumerate}
+
+Single-resource state (inventory counters, balances, unique tokens) fails criterion (3) by construction and is therefore explicitly excluded from this caching layer; such state is handled by a separate contention layer, the design of which is the subject of the parallel B.Tech project report.
+
+\section{Production Results}
+
+The architecture was rolled out in stages on a cluster of $\sim$24 application nodes serving roughly 68{,}000 cross-node operations per second at peak. The following improvements were measured over a 30-day post-deployment window:
+
+\begin{itemize}[leftmargin=*]
+    \item Combined Tier-1 + Tier-2 hit rate: \textbf{54.8\,\%} on eligible lookups.
+    \item Cross-node calls per second eliminated: \textbf{$\sim$2{,}800} at peak.
+    \item Total cross-node call reduction at peak: \textbf{4.1\,\%}.
+    \item p95 API latency: \textbf{98\,ms $\rightarrow$ 87\,ms} (\textbf{--11.2\,\%}).
+    \item p99 API latency: \textbf{285\,ms $\rightarrow$ 248\,ms} (\textbf{--13.0\,\%}).
+    \item Redis p99 latency: \textbf{12.5\,ms $\rightarrow$ 9.2\,ms} (\textbf{--26.2\,\%}), driven by the removed load on the shared cluster.
+    \item Memory overhead: under 20\,MB per node.
+    \item Cache-related correctness incidents: \textbf{zero}.
+\end{itemize}
+
+\section{Relationship to the B.Tech Project}
+
+The academic treatment of this work --- a deeper formalisation of the cache-safety boundary framework, an extension that handles single-resource contention via distributed locking, atomic Lua decrement, OCC, PN-Counter CRDTs and single-flight request coalescing, and an evaluation against examiner challenges raised at the mid-evaluation --- is presented in the parallel B.Tech research-paper report. This chapter restricts itself to the \emph{deliverable engineering} on production traffic at Juspay; the academic contribution is referenced for completeness but not duplicated.
+
+
+% ----------------------------- CHAPTER: OPENBAO -----------------------------
+\chapter[Distributed Secrets with OpenBao]{Distributed Secrets Infrastructure with Shamir Secret Sharing and Raft}
+\label{chap:openbao}
+
+\section{Motivation}
+
+The pre-existing secrets infrastructure relied heavily on AWS KMS for envelope encryption of customer-scoped secrets. While correct, this design had three operational pain points that motivated a redesign:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Cost coupling to traffic.} Every \texttt{Decrypt} on a hot path was a billable AWS API call. Under burst traffic the KMS bill scaled superlinearly and could not be amortised across requests without weakening the security model.
+    \item \textbf{Single trust anchor.} The KMS root key, although protected by AWS's HSM-backed CMK, represented a single external trust anchor whose compromise (or whose access-policy misconfiguration) would unseal every customer's secrets. Several auditors and large merchant customers had begun asking explicitly for a self-custodial, on-premises key-distribution mechanism with no single-key compromise path.
+    \item \textbf{Operational coupling to AWS region health.} Outages and throttling events in the AWS \texttt{kms} service translated directly into payment-side errors. A self-hosted key-distribution path decouples this dependency.
+\end{enumerate}
+
+The replacement is a self-hosted secrets cluster based on \textbf{OpenBao} (the open-source fork of HashiCorp Vault), configured with three properties that together address the three pain points above: \emph{Shamir secret sharing} for the unseal key, \emph{memory-only key material} on the running daemons, and \emph{Raft-based replication} for the storage backend.
+
+\section{Shamir Secret Sharing for Unseal}
+
+The cluster is initialised with a master key $K$ that is never written to durable storage in plaintext. Instead, $K$ is split into $n$ shares using Shamir's $(t, n)$-threshold scheme so that any $t$ out of $n$ share-holders can reconstruct $K$, but any $t-1$ holders learn nothing. In the production deployment we chose $(t, n) = (3, 5)$, so that:
+
+\begin{itemize}[leftmargin=*]
+    \item No single operator can unseal the cluster on their own.
+    \item Up to two share-holders may be unavailable (illness, travel, key-rotation) without halting recovery.
+    \item Compromise of any two shares discloses no information about $K$.
+\end{itemize}
+
+On every restart of an OpenBao node, the node is in a \emph{sealed} state: the storage backend is encrypted at rest, but the daemon holds no decryption key in memory. Three of the five share-holders submit their shares (over an authenticated TLS channel from their respective workstations); the daemon reconstructs $K$ in memory, decrypts the storage encryption key, and transitions to \emph{unsealed}. At no point is $K$ written to disk on the OpenBao node.
+
+\section{Memory-Only Key Material}
+
+A central design decision is that all reconstructed key material lives only in process memory. Three consequences of this choice:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Disk loss is benign.} If a node's local disk is exfiltrated, the attacker obtains only the encrypted storage backend, which is useless without $K$.
+    \item \textbf{Restart requires re-unseal.} This is intentional. Spontaneous reboots (whether from kernel panic, OOM, or scheduled maintenance) leave the cluster sealed until the operators participate; this reduces blast radius from any post-boot compromise.
+    \item \textbf{Memory-protection hygiene matters.} The OpenBao process is configured with \texttt{mlock(MCL\_CURRENT|MCL\_FUTURE)} so the unsealed key is never paged to swap. \texttt{ptrace} is disabled via \texttt{prctl(PR\_SET\_DUMPABLE, 0)}; core dumps are suppressed; and the systemd unit runs with \texttt{ProtectKernelTunables}, \texttt{NoNewPrivileges}, and a restrictive seccomp profile.
+\end{itemize}
+
+\section{Raft-Based Storage Replication}
+
+The encrypted storage backend is replicated across an odd-numbered Raft cluster (typically 5 voters across 3 availability zones). Raft was chosen over consul-style gossip for two reasons: (i) it gives a hard, well-understood linearisability guarantee for writes, which matches the semantics secrets consumers expect; and (ii) it removes the operational dependency on a separate Consul cluster.
+
+Cluster membership is managed via OpenBao's \texttt{raft join} and \texttt{raft autopilot} subsystems, which automatically demote and remove voters that fall behind, and promote stable non-voters once they catch up. Failover testing showed automatic leader re-election within 5--7 seconds of a controlled leader kill, with no observable secret-fetch failures from the application side (clients retry on the standard sealed/leader-loss errors).
+
+\section{Integration into the Application Path}
+
+The application-side change was minimal. A new client wraps the OpenBao API and exposes the same \texttt{Decrypt} surface as the previous AWS KMS client. A typical request now proceeds:
+
+\begin{enumerate}[leftmargin=*]
+    \item Application requests a transit-engine \texttt{decrypt} on an envelope-encrypted payload.
+    \item OpenBao server-side decrypts the data-encryption key (DEK) using the in-memory transit key, returns the DEK over TLS.
+    \item Application uses the DEK locally to decrypt the payload.
+    \item DEK is zeroised in process memory immediately after use.
+\end{enumerate}
+
+The transit engine is configured with key-rotation enabled and key-version pinning so that re-keying does not break in-flight ciphertexts.
+
+\section{Outcomes}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{KMS API spend} reduced significantly on the migrated workloads (the precise figure is not reproduced here for commercial reasons).
+    \item \textbf{Audit posture} improved: the unseal procedure is now documented, drilled quarterly, and produces an immutable audit trail of which share-holders participated.
+    \item \textbf{Decoupling from AWS region health} eliminated a class of cross-region incidents that had historically appeared as payment failures.
+    \item \textbf{Latency} for \texttt{Decrypt} on the hot path is comparable to AWS KMS in-region latency ($\sim$2--4\,ms p99) and substantially better cross-region.
+    \item \textbf{Failure modes are explicit:} loss of any two voters or any two share-holders leaves the cluster operational; loss of three triggers an explicit, alarmed degradation rather than silent data loss.
+\end{itemize}
+
+
+% ----------------------------- CHAPTER: BARBICAN ----------------------------
+\chapter[Barbican KMS with HSM]{Barbican Key Management Service with HSM Integration}
+\label{chap:barbican}
+
 
 % ─────────────────────────────────────────────────────────────────────────
 \section{Introduction and Motivation}
@@ -531,7 +764,11 @@ The integration of Barbican with an HSM establishes a production-grade, multi-te
 % ═══════════════════════════════════════════════════════════════════════════
 %     CHAPTER 3 — DISTRIBUTED PAYOUT SCHEDULING SYSTEM
 % ═══════════════════════════════════════════════════════════════════════════
-\chapter{Distributed Event-Driven Payout Scheduling System}
+
+% ----------------------------- CHAPTER: PAYOUT ------------------------------
+\chapter[Distributed Payout Scheduling]{Distributed Event-Driven Payout Scheduling System (Namma Yatri)}
+\label{chap:payout}
+
 
 % ─────────────────────────────────────────────────────────────────────────
 \section{Introduction and Business Context}
@@ -951,36 +1188,229 @@ The distributed payout scheduling system transforms driver payments from a slow,
 
 % ═══════════════════════════════════════════════════════════════════════════
 %                          CONCLUSION
-% ═══════════════════════════════════════════════════════════════════════════
-\chapter{Conclusion}
 
-This internship provided an opportunity to work across three critical pillars of modern cloud-native engineering:
+% ----------------------------- CHAPTER: POSTGRES ON K8S/OPENSTACK -----------
+\chapter[PostgreSQL on Kubernetes/OpenStack]{Self-Directed Project: PostgreSQL on Kubernetes/OpenStack}
+\label{chap:postgres-k8s}
 
-\begin{enumerate}
-    \item \textbf{Storage Infrastructure:} Understanding the limitations of distributed storage systems (Ceph) at scale and evaluating next-generation alternatives (Lightbits) that leverage NVMe-over-TCP to deliver an order-of-magnitude improvement in performance-per-node.
+\section{Motivation and Scope}
 
-    \item \textbf{Security Architecture:} Designing and implementing a production-grade key management pipeline using Barbican and HSMs, ensuring per-tenant cryptographic isolation through envelope encryption with hardware-backed master keys.
+Industry teams routinely operate Postgres on Kubernetes on top of OpenStack-managed VMs in production, but the full stack --- from bare metal up through the database --- is rarely available to a single engineer to exercise end-to-end. This self-directed project replicated that stack on a single workstation (an Intel i9-14900) with sufficient fidelity that it could be used as both a learning vehicle and a reproducible testbed for failure-injection experiments.
 
-    \item \textbf{Distributed Systems and Payments:} Building a fault-tolerant, exactly-once payout scheduling system that operates at scale, integrating with payment gateways, implementing reconciliation, and reducing payout latency from weekly to near-real-time.
+The project produced three engineering deliverables:
+
+\begin{enumerate}[leftmargin=*]
+    \item A five-layer nested virtualisation stack tuned for write-heavy database workloads.
+    \item A zero-touch, end-to-end automation pipeline that brings a fresh OpenStack tenant from empty to a running, highly-available PostgreSQL cluster in roughly 12 minutes.
+    \item A Zero-Trust secret delivery framework with a Go-based broker and a Python SDK that VMs use to fetch their secrets at first boot without long-lived credentials.
 \end{enumerate}
 
-Each project reinforced fundamental engineering principles: \textit{simplicity in design, rigour in implementation, and relentless focus on reliability and performance}. The experience bridged the gap between theoretical knowledge and the realities of production-grade systems, providing invaluable exposure to the challenges of operating distributed infrastructure at scale.
+\section{Five-Layer Nested Virtualisation Stack}
+
+The stack consists of, from the bottom up:
+
+\begin{description}[leftmargin=*]
+    \item[Layer 1 --- Bare metal:] Intel i9-14900, 24 cores (8 P-cores + 16 E-cores), 128\,GB DDR5, NVMe storage.
+    \item[Layer 2 --- KVM host:] Linux + libvirt with VT-x and EPT enabled; nested virtualisation toggled on (\texttt{kvm-intel.nested=1}).
+    \item[Layer 3 --- OpenStack control plane:] A single-host OpenStack deployment (Nova, Neutron, Cinder, Glance, Keystone, Barbican) running inside a single privileged VM. Storage backed by Cinder over Ceph; networking via OVN.
+    \item[Layer 4 --- Kubernetes:] HA Kubernetes cluster (3 control-plane + 3 worker nodes) provisioned as OpenStack instances, control plane behind a kube-vip virtual IP.
+    \item[Layer 5 --- PostgreSQL:] CloudNativePG-managed Postgres cluster (1 primary + 2 synchronous replicas) running on the K8s layer, with PVCs backed by Cinder (and, transitively, by the Layer 1 NVMe).
+\end{description}
+
+\subsection{Performance Tuning}
+
+Naive nested virtualisation is slow: every database write traverses five virtual block devices and four network stacks. Two tuning passes recovered the bulk of the loss:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{NUMA-aware CPU pinning.} The 8 P-cores were partitioned across the OpenStack control VM, the K8s control-plane VMs, and the K8s workers. Each level was given an exclusive, NUMA-pinned set of vCPUs via libvirt's \texttt{<cputune>} and OpenStack's \texttt{hw:cpu\_policy=dedicated}. Cross-NUMA traffic was eliminated for the database workers.
+    \item \textbf{16\,GB hugepages.} Both the OpenStack VMs and the database PVCs were backed by 1\,GB hugepages, totalling 16\,GB pinned. This reduced TLB pressure visibly and stabilised \texttt{pgbench} TPS variance.
+\end{itemize}
+
+The combined effect on a TPC-B-like \texttt{pgbench} workload was an approximately \textbf{50\,\%} increase in write TPS over the un-tuned baseline.
+
+\section{Zero-Touch Cluster Provisioning}
+
+The objective was that running a single command (\texttt{make cluster}) should yield a verified-healthy HA Postgres cluster, with no operator interaction beyond entering an SSH key.
+
+The pipeline composes three open-source projects:
+
+\begin{description}[leftmargin=*]
+    \item[Cluster API for OpenStack (CAPO):] declarative provisioning of K8s clusters as OpenStack workloads. CAPO consumes a \texttt{Cluster}, \texttt{OpenStackCluster}, and \texttt{KubeadmControlPlane} manifest and reconciles the live state of the OpenStack tenant against them.
+    \item[CloudNativePG (CNPG):] a Kubernetes operator that provisions and manages PostgreSQL clusters as first-class K8s resources. The operator handles streaming replication, synchronous-replica election, automatic failover, and PITR via base backups + WAL archive.
+    \item[A small Make/shell wrapper:] orchestrates the OpenStack tenant bootstrap, applies the CAPI manifests, waits for cluster readiness, then applies the CNPG manifests.
+\end{description}
+
+\subsection{Time Breakdown}
+
+End-to-end provisioning of an empty OpenStack tenant to a healthy 3-replica Postgres cluster takes roughly \textbf{12 minutes} on the i9-14900:
+
+\begin{itemize}[leftmargin=*]
+    \item OpenStack tenant bootstrap (network, security groups, image): $\sim$1 min
+    \item Control-plane VM creation + cloud-init: $\sim$3 min
+    \item Worker VM creation + cloud-init: $\sim$3 min
+    \item kubeadm + CNI bring-up: $\sim$2 min
+    \item CNPG operator install + Postgres cluster creation: $\sim$3 min
+\end{itemize}
+
+\subsection{Failover Behaviour}
+
+A controlled \texttt{kill -9} of the Postgres primary results in CNPG promoting a synchronous replica within \textbf{$\sim$7\,seconds}, with \textbf{RPO = 0} confirmed by replaying the test workload against the new primary and observing no missing transactions. The same drill against an entire K8s control-plane node (simulated power loss of one of the three) similarly recovered within the kube-vip + etcd liveness budget without data loss.
+
+\section{Zero-Trust Secret Delivery Framework}
+
+The provisioning pipeline must hand secrets (database passwords, certificate keys, OAuth client credentials) to fresh VMs without requiring those VMs to ship pre-baked credentials. The constraint is the well-known \emph{secret-zero} bootstrapping problem.
+
+\subsection{Architecture}
+
+A small Go-based broker, \texttt{osvault-broker}, sits adjacent to the OpenBao cluster (Chapter~\ref{chap:openbao}). The flow is:
+
+\begin{enumerate}[leftmargin=*]
+    \item A fresh VM, on first boot, calls the OpenStack \textbf{Instance Metadata Service (IMDS)} for a signed identity document containing \texttt{instance\_id}, \texttt{project\_id}, and a Nova-signed assertion of liveness.
+    \item The VM sends this assertion to \texttt{osvault-broker} over the local OpenStack tenant network.
+    \item The broker validates the IMDS signature, looks up the instance's role in OpenBao's policy DB, and mints a short-lived (5\,min) \textbf{RS256-signed JWT} carrying the appropriate OpenBao token.
+    \item The VM presents the JWT to OpenBao and receives its scoped secrets.
+\end{enumerate}
+
+No long-lived secret material is ever placed in cloud-init userdata or in the VM image. The trust chain rests on the IMDS signing key (rotated weekly) and the broker's RSA key (held only in OpenBao's transit engine).
+
+\subsection{Custom Python SDK: \texttt{osvault}}
+
+To make consumption ergonomic, a small Python SDK named \texttt{osvault} wraps the broker handshake. A typical first-boot script looks like:
+
+\begin{lstlisting}[language=Python, caption={First-boot secret retrieval via osvault}]
+from osvault import VaultClient
+
+client = VaultClient.from_imds()        # auto-discovers IMDS, fetches RS256 JWT
+db = client.get("postgres/credentials") # short-lived DB password
+tls = client.get("tls/server-cert")     # private key + cert chain
+
+write_pgpass(db.username, db.password)
+write_tls_pair(tls.cert, tls.key)
+\end{lstlisting}
+
+The SDK handles JWT renewal, retries on transient broker unavailability, and clears all secret material from memory after use (\texttt{ctypes.memset} on the underlying buffers).
+
+\section{Outcomes and Reusability}
+
+The stack is reproducible from a single Git repository and a Make target. It has served as a sandbox for several follow-on experiments: chaos-style failure injection on the Postgres layer, latency profiling of nested networking, and dry-runs of OpenStack upgrades against a representative tenant. Beyond personal learning, the resulting Make pipeline and the \texttt{osvault} SDK are reusable artifacts: the pipeline has been adopted internally as the canonical way to spin up disposable test clusters, and the SDK has been packaged as an internal Python wheel.
 
 
-% ═══════════════════════════════════════════════════════════════════════════
-%                          REFERENCES
-% ═══════════════════════════════════════════════════════════════════════════
+% ----------------------------- CHAPTER: CONCLUSION --------------------------
+\chapter{Conclusion}
+\label{chap:conclusion}
+
+\section{Summary}
+
+This internship year exposed me to three distinct strata of the production distributed-systems stack: \emph{block storage} (Lightbits NVMe/TCP replacing CEPH at Juspay), \emph{in-process state management} (the two-tier caching layer for high-traffic payment APIs), and \emph{secrets infrastructure} (the Shamir-secret-sharing-based OpenBao cluster, with the supporting Barbican KMS + HSM integration). In parallel, the open-source contribution to Namma Yatri delivered a distributed event-driven payout scheduler under live production traffic, and the self-directed PostgreSQL on Kubernetes/OpenStack project closed the loop by exercising the full stack from bare metal to database on a single workstation.
+
+The headline numbers across these projects --- 4$\times$ storage efficiency on Lightbits, 4.1\,\% cross-node call reduction and 11.2\,\% p95 latency reduction on caching, 7-second automatic failover on the K8s/Postgres stack with RPO=0, and the migration of Namma Yatri driver payouts from weekly cycles to T+2 hours --- are individually meaningful but, taken together, point to a recurring engineering principle: the largest wins came not from new abstractions but from \emph{taking correctness seriously while doing more with fewer machines}.
+
+\section{Skills Developed}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Production distributed-systems engineering:} writing code that runs on real money-moving traffic; understanding tail latency, blast radius, and recovery as first-class design constraints.
+    \item \textbf{Cross-stack debugging:} reasoning about a single transaction's path across application, cache, Redis, OpenStack volume, and Lightbits storage --- and being able to attribute latency to any layer.
+    \item \textbf{Open-source collaboration:} the Namma Yatri PR went through public review with the community and a maintainer who set a high bar for design clarity, idempotency, and test coverage.
+    \item \textbf{Cryptographic engineering hygiene:} Shamir secret sharing, RS256 JWT discipline, mlock-based memory protection, and the operational drills that go with self-custodial key material.
+    \item \textbf{Systems-level performance tuning:} NUMA-aware CPU pinning, hugepages, nested virtualisation, and the empirical method of validating each tuning step against a reproducible benchmark.
+\end{itemize}
+
+\section{Future Directions}
+
+\begin{itemize}[leftmargin=*]
+    \item Extend the caching framework with a contention layer that handles single-resource state safely; this is the subject of the parallel B.Tech project report.
+    \item Generalise the OpenBao broker into a small, reusable open-source project (currently internal-only) so other teams running OpenStack can adopt the pattern.
+    \item Run the PostgreSQL on K8s/OpenStack pipeline as a chaos-engineering testbed: scripted failure injection at each of the five virtualisation layers, with end-to-end correctness invariants.
+\end{itemize}
+
+
+% ============================== BIBLIOGRAPHY =================================
 \begin{thebibliography}{99}
-    \bibitem{lightbits} Lightbits Labs, ``LightOS Technical Documentation,'' \url{https://www.lightbitslabs.com/resources/}
-    \bibitem{ceph} Weil, S.A., et al., ``Ceph: A Scalable, High-Performance Distributed File System,'' \textit{Proceedings of the 7th Symposium on Operating Systems Design and Implementation (OSDI)}, 2006.
-    \bibitem{nvmetcp} NVM Express, Inc., ``NVMe over Fabrics Specification,'' \url{https://nvmexpress.org/specifications/}
-    \bibitem{barbican} OpenStack Barbican, ``Key Manager Service Documentation,'' \url{https://docs.openstack.org/barbican/latest/}
-    \bibitem{pkcs11} RSA Laboratories, ``PKCS \#11: Cryptographic Token Interface Standard,'' \url{https://www.cryptsoft.com/pkcs11doc/}
-    \bibitem{fips140} NIST, ``FIPS 140-2: Security Requirements for Cryptographic Modules,'' 2001.
-    \bibitem{redis} Redis Ltd., ``Redis Sorted Sets Documentation,'' \url{https://redis.io/docs/data-types/sorted-sets/}
-    \bibitem{kafka} Apache Software Foundation, ``Apache Kafka Documentation,'' \url{https://kafka.apache.org/documentation/}
-    \bibitem{paytm} Paytm, ``EDC Payment Gateway API Documentation,'' \url{https://developer.paytm.com/}
-    \bibitem{idempotency} Helland, P., ``Idempotence Is Not a Medical Condition,'' \textit{Communications of the ACM}, vol. 55, no. 5, 2012.
+
+\bibitem{lightbits}
+Lightbits Labs, ``LightOS Technical Documentation,''
+\url{https://www.lightbitslabs.com/resources/}
+
+\bibitem{ceph}
+Weil, S.A., et al.,
+``Ceph: A Scalable, High-Performance Distributed File System,''
+\textit{Proceedings of the 7th Symposium on Operating Systems Design and Implementation (OSDI)}, 2006.
+
+\bibitem{nvmetcp}
+NVM Express, Inc.,
+``NVMe over Fabrics Specification,''
+\url{https://nvmexpress.org/specifications/}
+
+\bibitem{barbican}
+OpenStack Barbican,
+``Key Manager Service Documentation,''
+\url{https://docs.openstack.org/barbican/latest/}
+
+\bibitem{pkcs11}
+RSA Laboratories,
+``PKCS \#11: Cryptographic Token Interface Standard,''
+\url{https://www.cryptsoft.com/pkcs11doc/}
+
+\bibitem{fips140}
+NIST,
+``FIPS 140-2: Security Requirements for Cryptographic Modules,''
+2001.
+
+\bibitem{redis}
+Redis Ltd.,
+``Redis Sorted Sets Documentation,''
+\url{https://redis.io/docs/data-types/sorted-sets/}
+
+\bibitem{kafka}
+Apache Software Foundation,
+``Apache Kafka Documentation,''
+\url{https://kafka.apache.org/documentation/}
+
+\bibitem{paytm}
+Paytm,
+``EDC Payment Gateway API Documentation,''
+\url{https://developer.paytm.com/}
+
+\bibitem{idempotency}
+Helland, P.,
+``Idempotence Is Not a Medical Condition,''
+\textit{Communications of the ACM}, vol.\ 55, no.\ 5, 2012.
+
+\bibitem{shamir1979}
+Shamir, A.,
+``How to Share a Secret,''
+\textit{Communications of the ACM}, vol.\ 22, no.\ 11, pp.\ 612--613, 1979.
+
+\bibitem{ongaro2014raft}
+Ongaro, D. and Ousterhout, J.,
+``In Search of an Understandable Consensus Algorithm (Raft),''
+\textit{Proceedings of the 2014 USENIX Annual Technical Conference}, 2014.
+
+\bibitem{openbao}
+OpenBao Maintainers,
+``OpenBao: Open Source Secrets Management,''
+\url{https://openbao.org/}, 2025.
+
+\bibitem{capi}
+Kubernetes SIGs,
+``Cluster API and Cluster API Provider OpenStack (CAPO),''
+\url{https://cluster-api.sigs.k8s.io/}, 2025.
+
+\bibitem{cnpg}
+EnterpriseDB,
+``CloudNativePG: Postgres Operator for Kubernetes,''
+\url{https://cloudnative-pg.io/}, 2025.
+
+\bibitem{kumar2024caching}
+Kumar, A., et al.,
+``Comparative Analysis of Distributed Caching Algorithms,''
+arXiv:2504.02220, 2024.
+
+\bibitem{nammayatri}
+Namma Yatri Project,
+``Open-Source Mobility Platform,''
+\url{https://github.com/nammayatri/nammayatri}, 2026.
+
 \end{thebibliography}
 
 \end{document}
